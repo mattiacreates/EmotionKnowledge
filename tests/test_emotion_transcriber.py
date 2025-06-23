@@ -1,4 +1,6 @@
 import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import importlib
+import pytest
 
 from emotion_knowledge import EmotionTranscriptionPipeline, AudioTranscriber, TextEmotionAnnotator
 
@@ -49,7 +51,6 @@ def test_annotator_truncates_long_text():
     result = annotator(long_text)
     assert annotator.captured.get("truncation") is True
     assert result.startswith("[happy]")
-
 
 def test_transcriber_passes_pipeline_kwargs():
     """AudioTranscriber should initialize the HF pipeline with expected kwargs."""
