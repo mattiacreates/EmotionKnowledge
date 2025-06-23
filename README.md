@@ -28,7 +28,7 @@ pip install -r requirements.txt
 Run the example:
 
 ```bash
-python emotion_transcriber.py path/to/audio.wav
+python -m emotion_knowledge path/to/audio.wav
 ```
 
 The script prints the plain transcription and the transcription with
