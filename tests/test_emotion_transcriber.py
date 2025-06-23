@@ -53,11 +53,17 @@ def test_annotator_truncates_long_text():
     assert result.startswith("[happy]")
 
 def test_transcriber_passes_pipeline_kwargs():
-    """AudioTranscriber should initialize the HF pipeline with expected kwargs."""
+    """AudioTranscriber should pass the language when calling the pipeline."""
     from unittest.mock import Mock, patch
 
-    with patch("emotion_knowledge.pipeline", Mock(return_value=Mock())) as mock:
-        AudioTranscriber()
+    pipeline_instance = Mock(return_value={"text": "foo"})
+    with patch("emotion_knowledge.pipeline", Mock(return_value=pipeline_instance)) as mock:
+        transcriber = AudioTranscriber()
         assert mock.call_args.args[0] == "automatic-speech-recognition"
         assert mock.call_args.kwargs.get("model") == "openai/whisper-base"
-        assert mock.call_args.kwargs.get("language") == "de"
+        assert "language" not in mock.call_args.kwargs
+
+        transcriber("audio.wav")
+        pipeline_instance.assert_called_once_with(
+            "audio.wav", generate_kwargs={"language": "de"}
+        )

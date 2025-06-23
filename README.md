@@ -19,8 +19,9 @@ an audio-based emotion model.
 
 ## Default models
 
-The built-in classes work with German data. `AudioTranscriber` loads
-`openai/whisper-base` with `language='de'` for speech recognition, while
+The built-in classes work with German data. `AudioTranscriber` uses
+`openai/whisper-base` for speech recognition and passes
+`language='de'` when invoking the pipeline, while
 `TextEmotionAnnotator` uses `oliverguhr/german-emotion-bert` for emotion
 classification.
 
