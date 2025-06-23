@@ -20,7 +20,8 @@ an audio-based emotion model.
 ## Default models
 
 The built-in classes work with German data. `AudioTranscriber` loads
-`openai/whisper-base` with `language='de'` for speech recognition, while
+`openai/whisper-base` and selects German via
+`generate_kwargs={"language": "de"}` when transcribing, while
 `TextEmotionAnnotator` uses `oliverguhr/german-emotion-bert` for emotion
 classification.
 
