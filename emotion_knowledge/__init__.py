@@ -2,10 +2,7 @@ import argparse
 from dataclasses import dataclass
 from typing import Tuple
 
-try:
-    from transformers import pipeline  # type: ignore
-except Exception:  # pragma: no cover - fallback when transformers isn't installed
-    from transformers_stub import pipeline
+from transformers import pipeline
 
 
 @dataclass
@@ -32,29 +29,29 @@ class AudioTranscriber:
 
 @dataclass
 class TextEmotionAnnotator:
-    """Annotate text with emotions using a transformers classifier.
+    """Annotate text with emotions using a Llama-based model.
 
-    The default model is ``oliverguhr/german-emotion-bert``, so text should be
-    in German. Long inputs are truncated to the model's maximum length when
-    the underlying pipeline is called.
+    ``TextEmotionAnnotator`` prompts an instruction-tuned Llama model to
+    summarise the emotion of the text. Only a single-word label is returned.
+    The default model ``meta-llama/Meta-Llama-3-8B-Instruct`` is freely
+    available from Hugging Face.
     """
 
-    model: str = "oliverguhr/german-emotion-bert"
+    model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
 
     def __post_init__(self) -> None:
-        self.pipeline = pipeline("text-classification", model=self.model, return_all_scores=True)
+        self.pipeline = pipeline("text-generation", model=self.model)
 
     def __call__(self, text: str) -> str:
-        if hasattr(self.pipeline, "tokenizer"):
-            scores = self.pipeline(
-                text,
-                truncation=True,
-                max_length=self.pipeline.tokenizer.model_max_length,
-            )[0]
-        else:
-            scores = self.pipeline(text, truncation=True)[0]
-        top = max(scores, key=lambda s: s["score"])
-        return f"[{top['label']}] {text}"
+        prompt = (
+            "Du bist ein Assistent, der die Emotion des folgenden Textes in einem Wort beschreibt. "
+            "Gib nur dieses Wort aus.\n\nText: "
+            + text
+            + "\nEmotion:"
+        )
+        result = self.pipeline(prompt, max_new_tokens=3, do_sample=False)[0]["generated_text"]
+        emotion = result.split("Emotion:")[-1].strip().split()[0]
+        return f"[{emotion}] {text}"
 
 
 @dataclass
