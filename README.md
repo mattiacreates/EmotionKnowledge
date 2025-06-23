@@ -17,6 +17,13 @@ multimodal approaches.
 The code is structured so additional components can be inserted, such as
 an audio-based emotion model.
 
+## Default models
+
+The built-in classes work with German data. `AudioTranscriber` loads
+`openai/whisper-base` with `language='de'` for speech recognition, while
+`TextEmotionAnnotator` uses `oliverguhr/german-emotion-bert` for emotion
+classification.
+
 ## Usage
 
 Install dependencies with:
@@ -43,4 +50,6 @@ pytest
 ```
 
 Tests use lightweight stubs so they run without downloading heavy
-models.
+models. A tiny `transformers` package in `transformers/` provides the
+stub. Remove or bypass this directory when running the example with the
+real `transformers` library so the actual models are loaded.

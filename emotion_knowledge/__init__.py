@@ -7,7 +7,11 @@ from transformers import pipeline
 
 @dataclass
 class AudioTranscriber:
-    """Convert audio to text using a transformers ASR pipeline."""
+    """Convert audio to text using a transformers ASR pipeline.
+
+    The default model is ``openai/whisper-base`` configured with
+    ``language='de'`` for German speech recognition.
+    """
 
     model: str = "openai/whisper-base"
 
@@ -28,8 +32,9 @@ class AudioTranscriber:
 class TextEmotionAnnotator:
     """Annotate text with emotions using a transformers classifier.
 
-    Long inputs are truncated to the model's maximum length when the
-    underlying pipeline is called.
+    The default model is ``oliverguhr/german-emotion-bert``, so text should be
+    in German. Long inputs are truncated to the model's maximum length when
+    the underlying pipeline is called.
     """
 
     model: str = "oliverguhr/german-emotion-bert"
