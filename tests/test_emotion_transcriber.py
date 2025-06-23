@@ -49,3 +49,13 @@ def test_annotator_truncates_long_text():
     result = annotator(long_text)
     assert annotator.captured.get("truncation") is True
     assert result.startswith("[happy]")
+
+
+def test_transcriber_passes_pipeline_kwargs():
+    """AudioTranscriber should initialize the HF pipeline with expected kwargs."""
+    from unittest.mock import Mock, patch
+
+    with patch("emotion_knowledge.pipeline", Mock(return_value=Mock())) as mock:
+        AudioTranscriber()
+        assert mock.call_args.kwargs.get("language") == "de"
+        assert mock.call_args.kwargs.get("task") == "transcribe"
