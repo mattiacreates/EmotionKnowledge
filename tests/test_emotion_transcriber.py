@@ -57,5 +57,6 @@ def test_transcriber_passes_pipeline_kwargs():
 
     with patch("emotion_knowledge.pipeline", Mock(return_value=Mock())) as mock:
         AudioTranscriber()
+        assert mock.call_args.args[0] == "automatic-speech-recognition"
+        assert mock.call_args.kwargs.get("model") == "openai/whisper-base"
         assert mock.call_args.kwargs.get("language") == "de"
-        assert mock.call_args.kwargs.get("task") == "transcribe"
