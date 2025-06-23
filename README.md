@@ -9,8 +9,8 @@ multimodal approaches.
 
 1. **AudioTranscriber** – converts an audio file to text using the
    Hugging Face `transformers` ASR pipeline (Whisper).
-2. **TextEmotionAnnotator** – detects emotions in the text using a
-   transformers text-classification model.
+2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion
+   of the text.
 3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It
    returns both the plain transcription and the emotion-enriched text.
 
@@ -21,9 +21,9 @@ an audio-based emotion model.
 
 The built-in classes work with German data. `AudioTranscriber` uses
 `openai/whisper-base` for speech recognition and passes
-`language='de'` when invoking the pipeline, while
-`TextEmotionAnnotator` uses `oliverguhr/german-emotion-bert` for emotion
-classification.
+`language='de'` when invoking the pipeline. `TextEmotionAnnotator` uses
+``meta-llama/Meta-Llama-3-8B-Instruct`` to generate a single emotion
+label.
 
 ## Usage
 
@@ -42,15 +42,3 @@ python -m emotion_knowledge path/to/audio.wav
 The script prints the plain transcription and the transcription with
 emotion labels.
 
-## Testing
-
-Run tests with:
-
-```bash
-pytest
-```
-
-Tests use lightweight stubs so they run without downloading heavy
-models. A tiny `transformers` package in `transformers/` provides the
-stub. Remove or bypass this directory when running the example with the
-real `transformers` library so the actual models are loaded.
