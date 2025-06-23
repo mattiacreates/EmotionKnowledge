@@ -52,11 +52,12 @@ def test_annotator_truncates_long_text():
     assert annotator.captured.get("truncation") is True
     assert result.startswith("[happy]")
 
+def test_transcriber_passes_pipeline_kwargs():
+    """AudioTranscriber should initialize the HF pipeline with expected kwargs."""
+    from unittest.mock import Mock, patch
 
-def test_transcriber_uses_stub_when_transformers_missing():
-    """AudioTranscriber should fall back to the stub pipeline when the real
-    transformers package isn't installed."""
-    if importlib.util.find_spec("transformers") is not None:
-        pytest.skip("transformers package is available")
-    transcriber = AudioTranscriber()
-    assert transcriber.pipeline.__class__.__name__ == "PipelineStub"
+    with patch("emotion_knowledge.pipeline", Mock(return_value=Mock())) as mock:
+        AudioTranscriber()
+        assert mock.call_args.args[0] == "automatic-speech-recognition"
+        assert mock.call_args.kwargs.get("model") == "openai/whisper-base"
+        assert mock.call_args.kwargs.get("language") == "de"

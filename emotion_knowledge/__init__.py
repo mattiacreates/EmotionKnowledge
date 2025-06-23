@@ -23,7 +23,6 @@ class AudioTranscriber:
             "automatic-speech-recognition",
             model=self.model,
             language="de",
-            task="transcribe",
         )
 
     def __call__(self, audio_path: str) -> str:
