@@ -1,4 +1,6 @@
 import sys, os; sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+import importlib
+import pytest
 
 from emotion_knowledge import EmotionTranscriptionPipeline, AudioTranscriber, TextEmotionAnnotator
 
@@ -49,3 +51,12 @@ def test_annotator_truncates_long_text():
     result = annotator(long_text)
     assert annotator.captured.get("truncation") is True
     assert result.startswith("[happy]")
+
+
+def test_transcriber_uses_stub_when_transformers_missing():
+    """AudioTranscriber should fall back to the stub pipeline when the real
+    transformers package isn't installed."""
+    if importlib.util.find_spec("transformers") is not None:
+        pytest.skip("transformers package is available")
+    transcriber = AudioTranscriber()
+    assert transcriber.pipeline.__class__.__name__ == "PipelineStub"

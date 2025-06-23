@@ -2,7 +2,10 @@ import argparse
 from dataclasses import dataclass
 from typing import Tuple
 
-from transformers import pipeline
+try:
+    from transformers import pipeline  # type: ignore
+except Exception:  # pragma: no cover - fallback when transformers isn't installed
+    from transformers_stub import pipeline
 
 
 @dataclass
