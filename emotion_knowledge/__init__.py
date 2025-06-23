@@ -52,6 +52,8 @@ class TextEmotionAnnotator:
 
 @dataclass
 class EmotionTranscriptionPipeline:
+    """Run transcription then emotion annotation and return both strings."""
+
     transcriber: AudioTranscriber
     annotator: TextEmotionAnnotator
 
