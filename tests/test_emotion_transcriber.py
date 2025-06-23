@@ -21,6 +21,17 @@ class DummyAnnotator(TextEmotionAnnotator):
         return "[happy] " + text
 
 
+class TruncationCapturingAnnotator(TextEmotionAnnotator):
+    def __post_init__(self):
+        self.captured = {}
+
+        def dummy(text, truncation=False, **kwargs):
+            self.captured["truncation"] = truncation
+            return [[{"label": "happy", "score": 1.0}]]
+
+        self.pipeline = dummy
+
+
 def test_pipeline_runs_with_dummies(tmp_path):
     audio_file = tmp_path / "fake.wav"
     audio_file.write_text("fake audio")
@@ -30,3 +41,11 @@ def test_pipeline_runs_with_dummies(tmp_path):
     assert annotated == "[happy] hello world"
     assert pipeline.transcriber.called
     assert pipeline.annotator.called
+
+
+def test_annotator_truncates_long_text():
+    annotator = TruncationCapturingAnnotator()
+    long_text = "word " * 600
+    result = annotator(long_text)
+    assert annotator.captured.get("truncation") is True
+    assert result.startswith("[happy]")

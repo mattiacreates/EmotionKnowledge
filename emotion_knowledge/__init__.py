@@ -21,7 +21,11 @@ class AudioTranscriber:
 
 @dataclass
 class TextEmotionAnnotator:
-    """Annotate text with emotions using a transformers classifier."""
+    """Annotate text with emotions using a transformers classifier.
+
+    Long inputs are truncated to the model's maximum length when the
+    underlying pipeline is called.
+    """
 
     model: str = "j-hartmann/emotion-english-distilroberta-base"
 
@@ -29,7 +33,7 @@ class TextEmotionAnnotator:
         self.pipeline = pipeline("text-classification", model=self.model, return_all_scores=True)
 
     def __call__(self, text: str) -> str:
-        scores = self.pipeline(text)[0]
+        scores = self.pipeline(text, truncation=True)[0]
         top = max(scores, key=lambda s: s["score"])
         return f"[{top['label']}] {text}"
 
