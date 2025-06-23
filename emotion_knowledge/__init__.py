@@ -12,7 +12,12 @@ class AudioTranscriber:
     model: str = "openai/whisper-base"
 
     def __post_init__(self) -> None:
-        self.pipeline = pipeline("automatic-speech-recognition", model=self.model)
+        self.pipeline = pipeline(
+            "automatic-speech-recognition",
+            model=self.model,
+            language="de",
+            task="transcribe",
+        )
 
     def __call__(self, audio_path: str) -> str:
         result = self.pipeline(audio_path)
@@ -27,13 +32,20 @@ class TextEmotionAnnotator:
     underlying pipeline is called.
     """
 
-    model: str = "j-hartmann/emotion-english-distilroberta-base"
+    model: str = "oliverguhr/german-emotion-bert"
 
     def __post_init__(self) -> None:
         self.pipeline = pipeline("text-classification", model=self.model, return_all_scores=True)
 
     def __call__(self, text: str) -> str:
-        scores = self.pipeline(text, truncation=True)[0]
+        if hasattr(self.pipeline, "tokenizer"):
+            scores = self.pipeline(
+                text,
+                truncation=True,
+                max_length=self.pipeline.tokenizer.model_max_length,
+            )[0]
+        else:
+            scores = self.pipeline(text, truncation=True)[0]
         top = max(scores, key=lambda s: s["score"])
         return f"[{top['label']}] {text}"
 
