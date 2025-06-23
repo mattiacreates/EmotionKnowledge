@@ -12,8 +12,9 @@ except Exception:  # pragma: no cover - fallback when transformers isn't install
 class AudioTranscriber:
     """Convert audio to text using a transformers ASR pipeline.
 
-    The default model is ``openai/whisper-base`` configured with
-    ``language='de'`` for German speech recognition.
+    The default model is ``openai/whisper-base`` for German speech
+    recognition. The ``language`` option is passed when the pipeline is
+    invoked rather than during initialisation.
     """
 
     model: str = "openai/whisper-base"
@@ -22,11 +23,10 @@ class AudioTranscriber:
         self.pipeline = pipeline(
             "automatic-speech-recognition",
             model=self.model,
-            language="de",
         )
 
     def __call__(self, audio_path: str) -> str:
-        result = self.pipeline(audio_path)
+        result = self.pipeline(audio_path, generate_kwargs={"language": "de"})
         return result["text"].strip()
 
 
