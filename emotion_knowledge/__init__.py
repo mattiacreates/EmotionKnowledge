@@ -32,12 +32,14 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
 
-    words = whisperx.assign_word_speakers(diarize_segments, {"segments": word_segments})
-    
+    result_with_speakers = whisperx.assign_word_speakers(
+        diarize_segments, aligned_output
+    )
+
     lines = []
     current_speaker = None
     current_line = ""
-    for word in words:
+    for word in result_with_speakers["word_segments"]:
         speaker = word.get("speaker", "Speaker")
         if speaker != current_speaker:
             if current_line:
