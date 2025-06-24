@@ -21,14 +21,15 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     align_model, metadata = whisperx.load_align_model(
         language_code="de", device=device
     )
-    result = whisperx.align(
+    aligned = whisperx.align(
         result["segments"], align_model, metadata, audio_path, device=device
     )
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
-    words = whisperx.assign_word_speakers(diarize_segments, result["word_segments"])
+
+    words = whisperx.assign_word_speakers(diarize_segments, aligned["word_segments"])
 
     lines = []
     current_speaker = None
