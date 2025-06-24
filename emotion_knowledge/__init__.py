@@ -25,7 +25,8 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
         result["segments"], align_model, metadata, audio_path, device=device
     )
 
-    diarize_model = whisperx.DiarizationPipeline(device=device)
+    token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
+    diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
     words = whisperx.assign_word_speakers(diarize_segments, result["word_segments"])
 
