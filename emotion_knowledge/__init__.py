@@ -48,7 +48,9 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
 def transcribe_audio_whisper(audio_path: str) -> str:
     """Transkribiert deutsche Sprache aus einer Audiodatei mit Whisper."""
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
-    model = whisper.load_model("large-v3")
+    """ Larger Model performed better """
+    """model = whisper.load_model("large-v3")"""
+    model = whisper.load_model("base")
     result = model.transcribe(audio_path, language=None, temperature=0.3)
     return result["text"].strip()
 
