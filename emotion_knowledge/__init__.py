@@ -21,12 +21,12 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     align_model, metadata = whisperx.load_align_model(
         language_code="de", device=device
     )
-    word_segments = whisperx.align(
+    aligned_output = whisperx.align(
         result["segments"], align_model, metadata, audio_path, device=device
     )
+    word_segments = aligned_output["word_segments"]
     print(type(word_segments))
-    print(list(word_segments.items())[:2]) 
-
+    print(word_segments[:2])  # Now it's safe to preview
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
