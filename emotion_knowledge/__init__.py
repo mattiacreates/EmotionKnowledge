@@ -15,22 +15,23 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     """ Changed to int8, to see if it works on collab"""
-    model = whisperx.load_model("large-v3", device=device, language="de", compute_type="int8")
+    model = whisperx.load_model("base", device=device, language="de", compute_type="int8")
     result = model.transcribe(audio_path)
 
     align_model, metadata = whisperx.load_align_model(
         language_code="de", device=device
     )
-    aligned = whisperx.align(
+    word_segments = whisperx.align(
         result["segments"], align_model, metadata, audio_path, device=device
     )
+    print(type(word_segments), word_segments[:2])  # Inspect structure
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
 
-    words = whisperx.assign_word_speakers(diarize_segments, aligned["word_segments"])
-
+    words = whisperx.assign_word_speakers(diarize_segments, word_segments)
+    
     lines = []
     current_speaker = None
     current_line = ""
