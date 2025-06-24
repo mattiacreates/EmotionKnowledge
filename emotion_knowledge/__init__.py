@@ -14,7 +14,8 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    model = whisperx.load_model("large-v3", device=device, language="de")
+    """ Changed to int8, to see if it works on collab"""
+    model = whisperx.load_model("large-v3", device=device, language="de", compute_type="int8")
     result = model.transcribe(audio_path)
 
     align_model, metadata = whisperx.load_align_model(
