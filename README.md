@@ -33,12 +33,17 @@ Install dependencies with:
 pip install -r requirements.txt
 ```
 
-Run the example:
+Run a transcription:
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-The script prints the plain transcription and the transcription with
-emotion labels.
+Add `--diarize` to enable speaker diarization with WhisperX:
+
+```bash
+python -m emotion_knowledge path/to/audio.wav --diarize
+```
+
+The script prints the resulting transcription to the console.
 
