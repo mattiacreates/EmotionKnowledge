@@ -1,81 +1,55 @@
 import argparse
-from dataclasses import dataclass
+from langchain_core.tools import tool
+from langchain_core.runnables import Runnable
 from typing import Tuple
 
+import whisper
 from transformers import pipeline
 
 
-@dataclass
-class AudioTranscriber:
-    """Convert audio to text using a transformers ASR pipeline.
-
-    The default model is ``openai/whisper-base`` for German speech
-    recognition. The ``language`` option is passed when the pipeline is
-    invoked rather than during initialisation.
-    """
-
-    model: str = "openai/whisper-base"
-
-    def __post_init__(self) -> None:
-        self.pipeline = pipeline(
-            "automatic-speech-recognition",
-            model=self.model,
-        )
-
-    def __call__(self, audio_path: str) -> str:
-        result = self.pipeline(audio_path, generate_kwargs={"language": "de"})
-        return result["text"].strip()
+@tool
+def transcribe_audio_whisper(audio_path: str) -> str:
+    """Transcribe German audio using Whisper (local openai/whisper-base)."""
+    model = whisper.load_model("base")
+    result = model.transcribe(audio_path, language="de")
+    return result["text"].strip()
 
 
-@dataclass
-class TextEmotionAnnotator:
-    """Annotate text with emotions using a Llama-based model.
-
-    ``TextEmotionAnnotator`` prompts an instruction-tuned Llama model to
-    summarise the emotion of the text. Only a single-word label is returned.
-    The default model ``meta-llama/Meta-Llama-3-8B-Instruct`` is freely
-    available from Hugging Face.
-    """
-
-    model: str = "meta-llama/Meta-Llama-3-8B-Instruct"
-
-    def __post_init__(self) -> None:
-        self.pipeline = pipeline("text-generation", model=self.model)
-
-    def __call__(self, text: str) -> str:
-        prompt = (
-            "Du bist ein Assistent, der die Emotion des folgenden Textes in einem Wort beschreibt. "
-            "Gib nur dieses Wort aus.\n\nText: "
-            + text
-            + "\nEmotion:"
-        )
-        result = self.pipeline(prompt, max_new_tokens=3, do_sample=False)[0]["generated_text"]
-        emotion = result.split("Emotion:")[-1].strip().split()[0]
-        return f"[{emotion}] {text}"
+@tool
+def annotate_emotion_llama(text: str) -> str:
+    """Annotate a single emotion word to the text using a LLaMA instruction model."""
+    model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+    generator = pipeline("text-generation", model=model_id)
+    prompt = (
+        "Du bist ein Assistent, der die Emotion des folgenden Textes in einem Wort beschreibt. "
+        "Gib nur dieses Wort aus.\n\nText: "
+        + text
+        + "\nEmotion:"
+    )
+    result = generator(prompt, max_new_tokens=3, do_sample=False)[0]["generated_text"]
+    emotion = result.split("Emotion:")[-1].strip().split()[0]
+    return f"[{emotion}] {text}"
 
 
-@dataclass
-class EmotionTranscriptionPipeline:
-    """Run transcription then emotion annotation and return both strings."""
+class EmotionTranscriptionWorkflow(Runnable):
+    """A LangChain-compatible workflow that transcribes audio and annotates it with emotion."""
 
-    transcriber: AudioTranscriber
-    annotator: TextEmotionAnnotator
-
-    def __call__(self, audio_path: str) -> Tuple[str, str]:
-        text = self.transcriber(audio_path)
-        annotated = self.annotator(text)
-        return text, annotated
+    def invoke(self, audio_path: str) -> Tuple[str, str]:
+        raw_text = transcribe_audio_whisper.invoke(audio_path)
+        annotated = annotate_emotion_llama.invoke(raw_text)
+        return raw_text, annotated
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Transcribe audio and annotate emotions")
-    parser.add_argument("audio", help="Path to an audio file")
+def main():
+    parser = argparse.ArgumentParser(description="German audio transcription with emotion annotation.")
+    parser.add_argument("audio", help="Path to audio file (WAV/MP3)")
     args = parser.parse_args()
 
-    pipeline = EmotionTranscriptionPipeline(AudioTranscriber(), TextEmotionAnnotator())
-    text, annotated = pipeline(args.audio)
-    print("Plain transcription:\n", text)
-    print("\nWith emotion:\n", annotated)
+    workflow = EmotionTranscriptionWorkflow()
+    raw, emotion = workflow.invoke(args.audio)
+
+    print("📄 Plain Transcription:\n", raw)
+    print("\n💬 Emotion Annotated:\n", emotion)
 
 
 if __name__ == "__main__":
