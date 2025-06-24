@@ -47,7 +47,8 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
                 lines.append(f"[{current_speaker}] {current_line.strip()}")
                 current_line = ""
             current_speaker = speaker
-        current_line += word["text"] + " "
+        word_text = word.get("text", word.get("word", ""))
+        current_line += word_text + " "
     if current_line:
         lines.append(f"[{current_speaker}] {current_line.strip()}")
     return "\n".join(lines)
