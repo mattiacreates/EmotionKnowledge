@@ -9,10 +9,19 @@ multimodal approaches.
 
 1. **AudioTranscriber** – converts an audio file to text using the
    Hugging Face `transformers` ASR pipeline (Whisper).
-2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion
-   of the text.
-3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It
-   returns both the plain transcription and the emotion-enriched text.
+2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion of the text.
+3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It returns both the plain transcription and the emotion-enriched text.
+4. **EmotionDetector** – uses a multimodal Hugging Face model to detect the emotion of each diarized segment.
+5. **TranscriptFormatter** – formats the annotated segments for display.
+
+The new `emotion_transcription_pipeline()` function chains these Runnables using LangChain so you can process audio end-to-end:
+
+```python
+from emotion_knowledge.pipeline import emotion_transcription_pipeline
+
+pipeline = emotion_transcription_pipeline()
+print(pipeline.invoke("path/to/audio.wav"))
+```
 
 The code is structured so additional components can be inserted, such as
 an audio-based emotion model.
