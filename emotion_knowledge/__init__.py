@@ -28,6 +28,9 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
         result["segments"], align_model, metadata, audio_path, device=device
     )
     word_segments = aligned_output["word_segments"]
+    if os.getenv("EK_DEBUG"):
+        print(type(word_segments))
+        print(word_segments[:2])
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
