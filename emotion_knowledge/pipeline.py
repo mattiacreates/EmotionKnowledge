@@ -34,6 +34,7 @@ class AudioTranscriber(Runnable):
             )
 
     def invoke(self, input: Any, config: Optional[dict] = None, **kwargs) -> List[Dict[str, Any]]:
+        print("✅ Using updated AudioTranscriber.invoke")
         """Transcribe audio file. The input is expected to be the path."""
         audio_path = input if isinstance(input, str) else input.get("audio_path")
         assert os.path.exists(audio_path), f"File not found: {audio_path}"
