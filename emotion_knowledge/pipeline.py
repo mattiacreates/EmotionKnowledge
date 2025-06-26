@@ -36,6 +36,7 @@ class AudioTranscriber(Runnable):
     def invoke(
         self, audio_path: str, config: Optional[dict] = None
     ) -> List[Dict[str, Any]]:
+        """Transcribe `audio_path`. The optional config dict is ignored."""
         assert os.path.exists(audio_path), f"File not found: {audio_path}"
         result = self.model.transcribe(audio_path)
         segments = result["segments"]
@@ -84,6 +85,7 @@ class EmotionAnnotator(Runnable):
     def invoke(
         self, segments: List[Dict[str, Any]], config: Optional[dict] = None
     ) -> List[Dict[str, Any]]:
+        """Annotate segments with emotions. The optional config dict is ignored."""
         annotated = []
         for seg in segments:
             inputs = self.tokenizer(seg["text"], return_tensors="pt", truncation=True)
@@ -110,6 +112,7 @@ class TranscriptFormatter(Runnable):
     def invoke(
         self, segments: List[Dict[str, Any]], config: Optional[dict] = None
     ) -> str:
+        """Format annotated segments. The optional config dict is ignored."""
         lines = []
         for seg in segments:
             speaker = seg.get("speaker", "Speaker")
