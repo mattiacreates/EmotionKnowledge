@@ -48,10 +48,11 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-Add `--diarize` to enable speaker diarization with WhisperX:
+Add `--diarize` to enable speaker diarization with WhisperX. You can
+choose a different WhisperX model size with `--model-size`:
 
 ```bash
-python -m emotion_knowledge path/to/audio.wav --diarize
+python -m emotion_knowledge path/to/audio.wav --diarize --model-size medium
 ```
 
 The script prints the resulting transcription to the console.
