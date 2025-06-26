@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import torch
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import Runnable
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -34,7 +34,7 @@ class AudioTranscriber(Runnable):
             )
 
     def invoke(
-        self, audio_path: str, config: RunnableConfig | None = None
+        self, audio_path: str, config: Optional[dict] = None
     ) -> List[Dict[str, Any]]:
         assert os.path.exists(audio_path), f"File not found: {audio_path}"
         result = self.model.transcribe(audio_path)
@@ -82,7 +82,7 @@ class EmotionAnnotator(Runnable):
         self.device = device
 
     def invoke(
-        self, segments: List[Dict[str, Any]], config: RunnableConfig | None = None
+        self, segments: List[Dict[str, Any]], config: Optional[dict] = None
     ) -> List[Dict[str, Any]]:
         annotated = []
         for seg in segments:
@@ -108,7 +108,7 @@ class TranscriptFormatter(Runnable):
     """Formats the annotated transcript."""
 
     def invoke(
-        self, segments: List[Dict[str, Any]], config: RunnableConfig | None = None
+        self, segments: List[Dict[str, Any]], config: Optional[dict] = None
     ) -> str:
         lines = []
         for seg in segments:
