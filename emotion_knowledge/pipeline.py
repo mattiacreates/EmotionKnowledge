@@ -6,7 +6,7 @@ import os
 from typing import Any, Dict, List
 
 import torch
-from langchain_core.runnables import Runnable
+from langchain_core.runnables import Runnable, RunnableConfig
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -33,7 +33,9 @@ class AudioTranscriber(Runnable):
                 device=self.device, use_auth_token=token
             )
 
-    def invoke(self, audio_path: str) -> List[Dict[str, Any]]:
+    def invoke(
+        self, audio_path: str, config: RunnableConfig | None = None
+    ) -> List[Dict[str, Any]]:
         assert os.path.exists(audio_path), f"File not found: {audio_path}"
         result = self.model.transcribe(audio_path)
         segments = result["segments"]
@@ -79,7 +81,9 @@ class EmotionAnnotator(Runnable):
             self.model = self.model.to(device)
         self.device = device
 
-    def invoke(self, segments: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def invoke(
+        self, segments: List[Dict[str, Any]], config: RunnableConfig | None = None
+    ) -> List[Dict[str, Any]]:
         annotated = []
         for seg in segments:
             inputs = self.tokenizer(seg["text"], return_tensors="pt", truncation=True)
@@ -103,7 +107,9 @@ class EmotionAnnotator(Runnable):
 class TranscriptFormatter(Runnable):
     """Formats the annotated transcript."""
 
-    def invoke(self, segments: List[Dict[str, Any]]) -> str:
+    def invoke(
+        self, segments: List[Dict[str, Any]], config: RunnableConfig | None = None
+    ) -> str:
         lines = []
         for seg in segments:
             speaker = seg.get("speaker", "Speaker")
