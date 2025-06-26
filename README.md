@@ -7,12 +7,13 @@ multimodal approaches.
 
 ## Overview
 
-1. **AudioTranscriber** – converts an audio file to text using the
-   Hugging Face `transformers` ASR pipeline (Whisper).
-2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion of the text.
-3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It returns both the plain transcription and the emotion-enriched text.
-4. **EmotionDetector** – uses a multimodal Hugging Face model to detect the emotion of each diarized segment.
-5. **TranscriptFormatter** – formats the annotated segments for display.
+1. **AudioTranscriber** – transcribes German speech with WhisperX and can
+    optionally perform speaker diarization.
+2. **EmotionAnnotator** – labels each utterance using the lightweight
+    `oliverguhr/german-sentiment-bert` model.
+3. **EmotionTranscriptionPipeline** – chains the components to produce a list of
+    annotated segments.
+4. **TranscriptFormatter** – formats the annotated segments for display.
 
 The new `emotion_transcription_pipeline()` function chains these Runnables using LangChain so you can process audio end-to-end:
 
@@ -28,11 +29,10 @@ an audio-based emotion model.
 
 ## Default models
 
-The built-in classes work with German data. `AudioTranscriber` uses
-`openai/whisper-base` for speech recognition and passes
-`language='de'` when invoking the pipeline. `TextEmotionAnnotator` uses
-``meta-llama/Meta-Llama-3-8B-Instruct`` to generate a single emotion
-label.
+The built-in classes work with German data. `AudioTranscriber` loads the
+WhisperX ASR model (size *small* by default) with `language='de'`. The
+`EmotionAnnotator` relies on the `oliverguhr/german-sentiment-bert` model
+to classify each utterance as positive, neutral or negative.
 
 ## Usage
 
