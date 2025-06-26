@@ -29,10 +29,10 @@ an audio-based emotion model.
 
 ## Default models
 
-The built-in classes work with German data. `AudioTranscriber` loads the
-WhisperX ASR model (size *small* by default) with `language='de'`. The
-`EmotionAnnotator` relies on the `oliverguhr/german-sentiment-bert` model
-to classify each utterance as positive, neutral or negative.
+The built-in classes work with German data. `transcribe_diarize_whisperx`
+loads WhisperX using `whisperx.load_model("medium")` with
+`language='de'`. The `EmotionDetector` defaults to the
+`ZebangCheng/Emotion-LLaMA` model to classify each utterance.
 
 ## Usage
 
