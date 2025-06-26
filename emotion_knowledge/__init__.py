@@ -4,6 +4,8 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import tool
 import whisper
 
+from .pipeline import emotion_transcription_pipeline
+
 
 
 @tool
@@ -26,8 +28,6 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
         result["segments"], align_model, metadata, audio_path, device=device
     )
     word_segments = aligned_output["word_segments"]
-    print(type(word_segments))
-    print(word_segments[:2])  # Now it's safe to preview
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
@@ -66,27 +66,7 @@ def transcribe_audio_whisper(audio_path: str) -> str:
     return result["text"].strip()
 
 
-class TranscriptionOnlyWorkflow(Runnable):
-    """Workflow zur reinen Transkription von Audio mit Whisper."""
-
-    def invoke(self, audio_path: str) -> str:
-        text = transcribe_audio_whisper.invoke(audio_path)
-        print("📄 Transkribierter Text:\n")
-        print(text)
-        return text
-
-
-class WhisperXDiarizationWorkflow(Runnable):
-    """Workflow für Transkription und Speaker-Diarization mit WhisperX."""
-
-    def invoke(self, audio_path: str) -> str:
-        text = transcribe_diarize_whisperx.invoke(audio_path)
-        print("📄 Transkription mit Sprecherlabels:\n")
-        print(text)
-        return text
-
-
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Transkription deutscher Audiodateien mit optionaler Diarization."
     )
@@ -96,13 +76,18 @@ def main():
         action="store_true",
         help="Speaker-Diarization mit WhisperX verwenden",
     )
+    parser.add_argument(
+        "--model-size",
+        default="small",
+        help="WhisperX ASR Modellgröße",
+    )
     args = parser.parse_args()
 
-    if args.diarize:
-        workflow = WhisperXDiarizationWorkflow()
-    else:
-        workflow = TranscriptionOnlyWorkflow()
-    _ = workflow.invoke(args.audio)
+    pipeline = emotion_transcription_pipeline(
+        diarize=args.diarize, asr_model_size=args.model_size
+    )
+    transcript = pipeline.invoke(args.audio)
+    print(transcript)
 
 
 if __name__ == "__main__":
