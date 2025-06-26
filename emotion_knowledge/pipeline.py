@@ -33,10 +33,9 @@ class AudioTranscriber(Runnable):
                 device=self.device, use_auth_token=token
             )
 
-    def invoke(
-        self, audio_path: str, config: Optional[dict] = None
-    ) -> List[Dict[str, Any]]:
-        """Transcribe `audio_path`. The optional config dict is ignored."""
+    def invoke(self, input: Any, config: Optional[dict] = None, **kwargs) -> List[Dict[str, Any]]:
+        """Transcribe audio file. The input is expected to be the path."""
+        audio_path = input if isinstance(input, str) else input.get("audio_path")
         assert os.path.exists(audio_path), f"File not found: {audio_path}"
         result = self.model.transcribe(audio_path)
         segments = result["segments"]
