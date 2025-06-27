@@ -57,6 +57,8 @@ def transcribe_diarize_whisperx(audio_path: str):
                 current_line = ""
             current_speaker = speaker
         word_text = word.get("text", word.get("word", ""))
+        # ensure SegmentSaver can access the spoken text
+        word["text"] = word_text
         current_line += word_text + " "
     if current_line:
         lines.append(f"[{current_speaker}] {current_line.strip()}")
@@ -108,6 +110,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         if segments:
             # Log the first segment for easier debugging
             print("First diarized segment:", segments[0])
+        ChromaDB-Implementation
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
             for segment in segments:
                 segment["audio_path"] = audio_path
