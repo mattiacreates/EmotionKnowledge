@@ -57,6 +57,8 @@ def transcribe_diarize_whisperx(audio_path: str):
                 current_line = ""
             current_speaker = speaker
         word_text = word.get("text", word.get("word", ""))
+        # ensure SegmentSaver can access the spoken text
+        word["text"] = word_text
         current_line += word_text + " "
     if current_line:
         lines.append(f"[{current_speaker}] {current_line.strip()}")
