@@ -10,7 +10,11 @@ def main():
     parser.add_argument("audio", help="Path to audio file")
     parser.add_argument("--diarize", action="store_true", help="Use speaker diarization")
     parser.add_argument("--model-size", default="base", help="Whisper model size")
-    parser.add_argument("--emotion-model", default="oliverguhr/german-emotion-bert", help="HuggingFace emotion model")
+    parser.add_argument(
+        "--emotion-model",
+        default="oliverguhr/german-sentiment-bert",
+        help="HuggingFace emotion model",
+    )
     parser.add_argument("--db-path", default="db", help="ChromaDB directory")
     parser.add_argument("--clip-dir", default="clips", help="Directory for audio clips")
     parser.add_argument("--batch-size", type=int, default=8, help="Emotion batch size")
@@ -20,7 +24,7 @@ def main():
     pipeline = emotion_transcription_pipeline(
         diarize=args.diarize,
         model_size=args.model_size,
-        emotion_model=args.emotion_model,
+        model_id=args.emotion_model,
         db_path=args.db_path,
         clip_dir=args.clip_dir,
         batch_size=args.batch_size,
