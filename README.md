@@ -46,11 +46,16 @@ python -m emotion_knowledge path/to/audio.wav
 ```
 
 Use `--diarize` for speaker labels and `--load-in-8bit` to reduce GPU
-memory usage. All settings can be configured via command line:
+memory usage. All settings can be configured via command line. Pass
+`--emotion-model` to choose a different HuggingFace classifier:
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize --batch-size 16 \
     --db-path mydb --clip-dir clips
+```
+
+```bash
+python -m emotion_knowledge path/to/audio.wav --emotion-model arpanghoshal/EmoRoBERTa
 ```
 
 The script prints the emotion-enriched transcript to the console.
