@@ -18,9 +18,23 @@ class SegmentSaver(Runnable):
 
     def invoke(self, segment: Dict[str, Any]) -> Dict[str, Any]:
         """Slice the audio segment and store its metadata."""
-        audio_path = segment["audio_path"]
-        start_ms = int(float(segment["start"]) * 1000)
-        end_ms = int(float(segment["end"]) * 1000)
+        audio_path = segment.get("audio_path")
+        # WhisperX may produce either "start"/"end" or "start_time"/"end_time".
+        if "start" in segment and "end" in segment:
+            start_val = segment["start"]
+            end_val = segment["end"]
+        elif "start_time" in segment and "end_time" in segment:
+            start_val = segment["start_time"]
+            end_val = segment["end_time"]
+        else:
+            print(
+                "Skipping segment due to missing time keys:",
+                list(segment.keys()),
+            )
+            return {}
+
+        start_ms = int(float(start_val) * 1000)
+        end_ms = int(float(end_val) * 1000)
         speaker = segment.get("speaker", "speaker").lower()
 
         clip_name = f"{speaker}_{uuid.uuid4().hex}.wav"
@@ -32,8 +46,8 @@ class SegmentSaver(Runnable):
         doc_id = uuid.uuid4().hex
         metadata = {
             "speaker": speaker,
-            "start_time": segment["start"],
-            "end_time": segment["end"],
+            "start_time": start_val,
+            "end_time": end_val,
             "text": segment.get("text", ""),
             "audio_clip_path": clip_path,
         }
