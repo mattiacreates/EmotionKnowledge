@@ -106,3 +106,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+from .pipeline import emotion_transcription_pipeline

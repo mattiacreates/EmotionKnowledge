@@ -7,12 +7,18 @@ multimodal approaches.
 
 ## Overview
 
-1. **AudioTranscriber** – converts an audio file to text using the
-   Hugging Face `transformers` ASR pipeline (Whisper).
-2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion
-   of the text.
-3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It
-   returns both the plain transcription and the emotion-enriched text.
+1. **AudioTranscriber** – converts an audio file to text with Whisper or
+   WhisperX (German, optional diarization). Transcripts are cached on
+   disk.
+2. **SegmentDBWriter** – writes each utterance into a ChromaDB
+   collection and exports individual WAV clips.
+3. **DBEmotionAnnotator** – batches the texts in the database and runs a
+   German emotion classification model. Results are stored back in the
+   DB.
+4. **TranscriptFormatter** – formats the annotated segments as readable
+   strings.
+5. **emotion_transcription_pipeline** – combines all steps using
+   LangChain's ``RunnableSequence``.
 
 The code is structured so additional components can be inserted, such as
 an audio-based emotion model.
@@ -39,11 +45,13 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-Add `--diarize` to enable speaker diarization with WhisperX:
+Use `--diarize` for speaker labels and `--load-in-8bit` to reduce GPU
+memory usage. All settings can be configured via command line:
 
 ```bash
-python -m emotion_knowledge path/to/audio.wav --diarize
+python -m emotion_knowledge path/to/audio.wav --diarize --batch-size 16 \
+    --db-path mydb --clip-dir clips
 ```
 
-The script prints the resulting transcription to the console.
+The script prints the emotion-enriched transcript to the console.
 
