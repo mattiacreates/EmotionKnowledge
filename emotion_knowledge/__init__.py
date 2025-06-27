@@ -110,7 +110,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         if segments:
             # Log the first segment for easier debugging
             print("First diarized segment:", segments[0])
-        ChromaDB-Implementation
+        # ChromaDB-Implementation
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
             for segment in segments:
                 segment["audio_path"] = audio_path
