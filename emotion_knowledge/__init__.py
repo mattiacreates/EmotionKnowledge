@@ -106,6 +106,8 @@ class WhisperXDiarizationWorkflow(Runnable):
         print(text)
 
         if segments:
+            # Log the first segment for easier debugging
+            print("First diarized segment:", segments[0])
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
             for segment in segments:
                 segment["audio_path"] = audio_path
