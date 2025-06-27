@@ -9,7 +9,7 @@ from .transcript_formatter import TranscriptFormatter
 def emotion_transcription_pipeline(
     diarize: bool = False,
     model_size: str = "base",
-    emotion_model: str = "oliverguhr/german-emotion-bert",
+    model_id: str = "oliverguhr/german-sentiment-bert",
     db_path: str = "db",
     clip_dir: str = "clips",
     load_in_8bit: bool = False,
@@ -19,7 +19,7 @@ def emotion_transcription_pipeline(
     writer = SegmentDBWriter(db_path=db_path, clip_dir=clip_dir)
     annotator = DBEmotionAnnotator(
         db_path=db_path,
-        model_name=emotion_model,
+        model_name=model_id,
         batch_size=batch_size,
         load_in_8bit=load_in_8bit,
     )

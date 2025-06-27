@@ -24,12 +24,26 @@ class DBEmotionAnnotator:
         kwargs = {"device_map": "auto"}
         if load_in_8bit:
             kwargs["load_in_8bit"] = True
-        self.model = AutoModelForSequenceClassification.from_pretrained(model_name, **kwargs)
-        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        try:
+            self.model = AutoModelForSequenceClassification.from_pretrained(model_name, **kwargs)
+            loaded_name = model_name
+        except Exception as e:
+            try:
+                self.model = AutoModelForSequenceClassification.from_pretrained(model_name, from_tf=True, **kwargs)
+                loaded_name = model_name
+            except Exception as e2:
+                fallback = "oliverguhr/german-sentiment-bert"
+                print(
+                    f"Warning: failed loading '{model_name}' (\n{e}\n{e2}). Falling back to '{fallback}'"
+                )
+                self.model = AutoModelForSequenceClassification.from_pretrained(fallback, **kwargs)
+                loaded_name = fallback
+        self.tokenizer = AutoTokenizer.from_pretrained(loaded_name)
         self.model.to(device)
         self.device = device
         self.batch_size = batch_size
         self.labels = [self.model.config.id2label[i] for i in range(self.model.config.num_labels)]
+        print(f"Loaded emotion model: {loaded_name}")
 
     def _batch(self, items: List[str], size: int) -> List[List[str]]:
         for i in range(0, len(items), size):
