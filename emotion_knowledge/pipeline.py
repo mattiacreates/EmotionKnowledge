@@ -75,12 +75,12 @@ class EmotionAnnotator(Runnable):
     """Annotates text segments with emotions using a lightweight model."""
 
     def __init__(self, model_id: str = "oliverguhr/german-sentiment-bert") -> None:
-        device = 0 if torch.cuda.is_available() else -1
+        """Load the sentiment model and move it to GPU when available."""
+        self.device = 0 if torch.cuda.is_available() else -1
         self.tokenizer = AutoTokenizer.from_pretrained(model_id)
         self.model = AutoModelForSequenceClassification.from_pretrained(model_id)
-        if device >= 0:
-            self.model = self.model.to(device)
-        self.device = device
+        if self.device >= 0:
+            self.model = self.model.to(self.device)
 
     def invoke(
         self, segments: List[Dict[str, Any]], config: Optional[dict] = None
@@ -88,14 +88,24 @@ class EmotionAnnotator(Runnable):
         """Annotate segments with emotions. The optional config dict is ignored."""
         annotated = []
         for seg in segments:
-            inputs = self.tokenizer(seg["text"], return_tensors="pt", truncation=True)
+            text = seg["text"]
+            # Keep inference short to avoid wasting memory on long utterances
+            if len(text) > 200:
+                text = text[:200]
+
+            inputs = self.tokenizer(text, return_tensors="pt", truncation=True)
             if self.device >= 0:
                 inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
             with torch.no_grad():
-                out = self.model(**inputs)
-            scores = out.logits.softmax(dim=-1)[0]
+                output = self.model(**inputs)
+                if self.device >= 0:
+                    torch.cuda.empty_cache()
+
+            scores = output.logits.softmax(dim=-1)[0]
             label_id = int(scores.argmax())
             label = self.model.config.id2label[label_id]
+
             annotated.append(
                 {
                     "speaker": seg.get("speaker", "Speaker"),

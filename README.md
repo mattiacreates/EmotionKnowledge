@@ -32,7 +32,9 @@ an audio-based emotion model.
 The built-in classes work with German data. `AudioTranscriber` loads the
 WhisperX ASR model (size *small* by default) with `language='de'`. The
 `EmotionAnnotator` relies on the `oliverguhr/german-sentiment-bert` model
-to classify each utterance as positive, neutral or negative.
+to classify each utterance as positive, neutral or negative. Long
+utterances are truncated and GPU cache is cleared after each prediction to
+keep memory usage low.
 
 ## Usage
 
