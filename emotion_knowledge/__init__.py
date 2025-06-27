@@ -4,6 +4,8 @@ from langchain_core.runnables import Runnable
 from langchain_core.tools import tool
 import whisper
 
+from .segment_saver import SegmentSaver
+
 
 @tool
 def transcribe_diarize_whisperx(audio_path: str) -> str:
