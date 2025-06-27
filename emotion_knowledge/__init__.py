@@ -8,8 +8,12 @@ from .segment_saver import SegmentSaver
 
 
 @tool
-def transcribe_diarize_whisperx(audio_path: str) -> str:
-    """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization."""
+def transcribe_diarize_whisperx(audio_path: str):
+    """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
+
+    Returns a dict with ``text`` and ``segments`` keys so downstream code can
+    further process the diarized segments.
+    """
     import torch
     import whisperx
 
@@ -39,6 +43,9 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
     )
 
     words = result_with_speakers["word_segments"]
+
+    # Build a formatted string while keeping the raw segment information so it
+    # can be persisted elsewhere.
     lines = []
     current_speaker = None
     current_line = ""
@@ -50,10 +57,14 @@ def transcribe_diarize_whisperx(audio_path: str) -> str:
                 current_line = ""
             current_speaker = speaker
         word_text = word.get("text", word.get("word", ""))
+        # ensure SegmentSaver can access the spoken text
+        word["text"] = word_text
         current_line += word_text + " "
     if current_line:
         lines.append(f"[{current_speaker}] {current_line.strip()}")
-    return "\n".join(lines)
+
+    text = "\n".join(lines)
+    return {"text": text, "segments": words}
 
 
 @tool
@@ -78,12 +89,30 @@ class TranscriptionOnlyWorkflow(Runnable):
 
 
 class WhisperXDiarizationWorkflow(Runnable):
-    """Workflow für Transkription und Speaker-Diarization mit WhisperX."""
+    """Workflow für Transkription und Speaker-Diarization mit WhisperX.
 
-    def invoke(self, audio_path: str) -> str:
-        text = transcribe_diarize_whisperx.invoke(audio_path)
+    The workflow optionally stores each diarized segment to ChromaDB using
+    :class:`SegmentSaver`.
+    """
+
+    def invoke(self, audio_path: str, db_path: str = "segment_db", clip_dir: str = "clips") -> str:
+        result = transcribe_diarize_whisperx.invoke(audio_path)
+        if isinstance(result, dict):
+            text = result.get("text", "")
+            segments = result.get("segments", [])
+        else:
+            text = str(result)
+            segments = []
+
         print("📄 Transkription mit Sprecherlabels:\n")
         print(text)
+
+        if segments:
+            saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
+            for segment in segments:
+                segment["audio_path"] = audio_path
+                saver.invoke(segment)
+
         return text
 
 
@@ -97,13 +126,24 @@ def main():
         action="store_true",
         help="Speaker-Diarization mit WhisperX verwenden",
     )
+    parser.add_argument(
+        "--db-path",
+        default="segment_db",
+        help="Pfad zum ChromaDB-Verzeichnis",
+    )
+    parser.add_argument(
+        "--clip-dir",
+        default="clips",
+        help="Verzeichnis zum Speichern der Audio-Schnipsel",
+    )
     args = parser.parse_args()
 
     if args.diarize:
         workflow = WhisperXDiarizationWorkflow()
+        _ = workflow.invoke(args.audio, db_path=args.db_path, clip_dir=args.clip_dir)
     else:
         workflow = TranscriptionOnlyWorkflow()
-    _ = workflow.invoke(args.audio)
+        _ = workflow.invoke(args.audio)
 
 
 if __name__ == "__main__":
