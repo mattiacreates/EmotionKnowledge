@@ -44,7 +44,6 @@ is enabled you can also store each speaker segment in a local ChromaDB
 instance by providing a database path and output directory for the audio
 
 clips:
-ChromaDB-Implementation
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize \
