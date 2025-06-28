@@ -19,18 +19,21 @@ def _group_utterances(segments):
     segments = sorted(segments, key=_start)
 
     grouped = []
+    first_speaker = segments[0].get("speaker") or "speaker"
     current = {
-        "speaker": segments[0].get("speaker", "speaker"),
+        "speaker": first_speaker,
         "start": float(segments[0].get("start", segments[0].get("start_time", 0))),
         "end": float(segments[0].get("end", segments[0].get("end_time", 0))),
         "text": segments[0].get("text", segments[0].get("word", "")),
     }
 
     for seg in segments[1:]:
-        speaker = seg.get("speaker", "speaker")
+        speaker = seg.get("speaker") or current["speaker"]
         start = float(seg.get("start", seg.get("start_time", 0)))
         end = float(seg.get("end", seg.get("end_time", 0)))
         text = seg.get("text", seg.get("word", ""))
+
+        seg["speaker"] = speaker
 
         if speaker == current["speaker"]:
             current["text"] += " " + text
@@ -86,12 +89,17 @@ def transcribe_diarize_whisperx(audio_path: str):
     current_speaker = None
     current_line = ""
     for word in words:
-        speaker = word.get("speaker", "Speaker")
+        speaker = word.get("speaker")
+        if speaker is None or speaker == "Speaker":
+            speaker = current_speaker or "Speaker"
+        word["speaker"] = speaker
+
         if speaker != current_speaker:
             if current_line:
                 lines.append(f"[{current_speaker}] {current_line.strip()}")
                 current_line = ""
             current_speaker = speaker
+
         word_text = word.get("text", word.get("word", ""))
         # ensure SegmentSaver can access the spoken text
         word["text"] = word_text
