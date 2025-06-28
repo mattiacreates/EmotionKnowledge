@@ -12,25 +12,40 @@ def _group_utterances(segments):
     if not segments:
         return []
 
-    # sort by start time to ensure chronological order
-    def _start(s):
-        return float(s.get("start", s.get("start_time", 0)))
-
-    segments = sorted(segments, key=_start)
+    # segments returned by WhisperX are already in chronological order.
+    # Sorting again can misplace words that lack explicit timestamps, so we
+    # preserve the given order. When timestamps are missing, we fall back to the
+    # previous segment's end time to keep the utterance boundaries sensible.
 
     grouped = []
+    def _to_float(val):
+        try:
+            return float(val)
+        except (TypeError, ValueError):
+            return None
+
+    first = segments[0]
+    first_speaker = first.get("speaker") or "speaker"
+    current_start = _to_float(first.get("start", first.get("start_time")))
+    current_end = _to_float(first.get("end", first.get("end_time")))
     current = {
-        "speaker": segments[0].get("speaker", "speaker"),
-        "start": float(segments[0].get("start", segments[0].get("start_time", 0))),
-        "end": float(segments[0].get("end", segments[0].get("end_time", 0))),
-        "text": segments[0].get("text", segments[0].get("word", "")),
+        "speaker": first_speaker,
+        "start": current_start,
+        "end": current_end,
+        "text": first.get("text", first.get("word", "")),
     }
 
     for seg in segments[1:]:
-        speaker = seg.get("speaker", "speaker")
-        start = float(seg.get("start", seg.get("start_time", 0)))
-        end = float(seg.get("end", seg.get("end_time", 0)))
+        speaker = seg.get("speaker") or current["speaker"]
+        start = _to_float(seg.get("start", seg.get("start_time")))
+        end = _to_float(seg.get("end", seg.get("end_time")))
+        if start is None:
+            start = current["end"]
+        if end is None:
+            end = start
         text = seg.get("text", seg.get("word", ""))
+
+        seg["speaker"] = speaker
 
         if speaker == current["speaker"]:
             current["text"] += " " + text
@@ -86,12 +101,17 @@ def transcribe_diarize_whisperx(audio_path: str):
     current_speaker = None
     current_line = ""
     for word in words:
-        speaker = word.get("speaker", "Speaker")
+        speaker = word.get("speaker")
+        if speaker is None or speaker == "Speaker":
+            speaker = current_speaker or "Speaker"
+        word["speaker"] = speaker
+
         if speaker != current_speaker:
             if current_line:
                 lines.append(f"[{current_speaker}] {current_line.strip()}")
                 current_line = ""
             current_speaker = speaker
+
         word_text = word.get("text", word.get("word", ""))
         # ensure SegmentSaver can access the spoken text
         word["text"] = word_text
