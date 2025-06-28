@@ -12,11 +12,10 @@ def _group_utterances(segments):
     if not segments:
         return []
 
-    # sort by start time to ensure chronological order
-    def _start(s):
-        return float(s.get("start", s.get("start_time", 0)))
-
-    segments = sorted(segments, key=_start)
+    # The word segments returned by WhisperX are already in chronological
+    # order. Sorting again can actually scramble the sequence if any words
+    # have slightly misaligned timestamps (e.g. negative values).  To preserve
+    # the diarization order we simply iterate over the provided list.
 
     grouped = []
     first_speaker = segments[0].get("speaker") or "speaker"
