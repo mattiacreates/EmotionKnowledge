@@ -48,5 +48,8 @@ python -m emotion_knowledge path/to/audio.wav --diarize \
     --db-path mydb --clip-dir clips
 ```
 
+Use `--whisperx-model` to choose the WhisperX model size when diarization is
+enabled. The default is `medium`.
+
 The script prints the resulting transcription to the console.
 

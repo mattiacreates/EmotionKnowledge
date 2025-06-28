@@ -46,8 +46,11 @@ def _group_utterances(segments):
 
 
 @tool
-def transcribe_diarize_whisperx(audio_path: str):
+def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
+
+    ``model_size`` controls which WhisperX model checkpoint is loaded
+    (e.g. ``base``, ``small``, ``medium``, ``large``).
 
     Returns a dict with ``text`` and ``segments`` keys so downstream code can
     further process the diarized segments.
@@ -59,7 +62,7 @@ def transcribe_diarize_whisperx(audio_path: str):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     """ Changed to int8, to see if it works on collab"""
-    model = whisperx.load_model("medium", device=device, language="de", compute_type="int8")
+    model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
     result = model.transcribe(audio_path)
 
     align_model, metadata = whisperx.load_align_model(
@@ -135,11 +138,18 @@ class WhisperXDiarizationWorkflow(Runnable):
     """Workflow für Transkription und Speaker-Diarization mit WhisperX.
 
     The workflow optionally stores each diarized segment to ChromaDB using
-    :class:`SegmentSaver`.
+    :class:`SegmentSaver`. The WhisperX model size can be configured via the
+    ``model_size`` argument.
     """
 
-    def invoke(self, audio_path: str, db_path: str = "segment_db", clip_dir: str = "clips") -> str:
-        result = transcribe_diarize_whisperx.invoke(audio_path)
+    def invoke(
+        self,
+        audio_path: str,
+        db_path: str = "segment_db",
+        clip_dir: str = "clips",
+        model_size: str = "medium",
+    ) -> str:
+        result = transcribe_diarize_whisperx.invoke(audio_path, model_size=model_size)
         if isinstance(result, dict):
             text = result.get("text", "")
             segments = result.get("segments", [])
@@ -182,11 +192,21 @@ def main():
         default="clips",
         help="Verzeichnis zum Speichern der Audio-Schnipsel",
     )
+    parser.add_argument(
+        "--whisperx-model",
+        default="medium",
+        help="WhisperX model size to use (base, small, medium, large)",
+    )
     args = parser.parse_args()
 
     if args.diarize:
         workflow = WhisperXDiarizationWorkflow()
-        _ = workflow.invoke(args.audio, db_path=args.db_path, clip_dir=args.clip_dir)
+        _ = workflow.invoke(
+            args.audio,
+            db_path=args.db_path,
+            clip_dir=args.clip_dir,
+            model_size=args.whisperx_model,
+        )
     else:
         workflow = TranscriptionOnlyWorkflow()
         _ = workflow.invoke(args.audio)
