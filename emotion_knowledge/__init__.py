@@ -7,6 +7,42 @@ import whisper
 from .segment_saver import SegmentSaver
 
 
+def _group_utterances(segments):
+    """Group word-level diarization results into utterances per speaker."""
+    if not segments:
+        return []
+
+    # sort by start time to ensure chronological order
+    def _start(s):
+        return float(s.get("start", s.get("start_time", 0)))
+
+    segments = sorted(segments, key=_start)
+
+    grouped = []
+    current = {
+        "speaker": segments[0].get("speaker", "speaker"),
+        "start": float(segments[0].get("start", segments[0].get("start_time", 0))),
+        "end": float(segments[0].get("end", segments[0].get("end_time", 0))),
+        "text": segments[0].get("text", segments[0].get("word", "")),
+    }
+
+    for seg in segments[1:]:
+        speaker = seg.get("speaker", "speaker")
+        start = float(seg.get("start", seg.get("start_time", 0)))
+        end = float(seg.get("end", seg.get("end_time", 0)))
+        text = seg.get("text", seg.get("word", ""))
+
+        if speaker == current["speaker"]:
+            current["text"] += " " + text
+            current["end"] = end
+        else:
+            grouped.append(current)
+            current = {"speaker": speaker, "start": start, "end": end, "text": text}
+
+    grouped.append(current)
+    return grouped
+
+
 @tool
 def transcribe_diarize_whisperx(audio_path: str):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
@@ -110,11 +146,11 @@ class WhisperXDiarizationWorkflow(Runnable):
         if segments:
             # Log the first segment for easier debugging
             print("First diarized segment:", segments[0])
-        # ChromaDB-Implementation
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
-            for segment in segments:
-                segment["audio_path"] = audio_path
-                saver.invoke(segment)
+            utterances = _group_utterances(segments)
+            for utt in utterances:
+                utt["audio_path"] = audio_path
+                saver.invoke(utt)
 
         return text
 

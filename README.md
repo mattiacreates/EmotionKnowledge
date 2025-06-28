@@ -40,10 +40,8 @@ python -m emotion_knowledge path/to/audio.wav
 ```
 
 Add `--diarize` to enable speaker diarization with WhisperX. When diarization
-is enabled you can also store each speaker segment in a local ChromaDB
-instance by providing a database path and output directory for the audio
-
-clips:
+is enabled you can also store each speaker **utterance** in a local ChromaDB
+instance by providing a database path and output directory for the audio clips.
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize \
