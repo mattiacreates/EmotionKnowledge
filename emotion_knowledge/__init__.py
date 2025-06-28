@@ -7,39 +7,47 @@ import whisper
 from .segment_saver import SegmentSaver
 
 
-def _group_utterances(segments):
-    """Group word-level diarization results into utterances per speaker."""
+def _group_utterances(segments, max_gap: float = 0.7):
+    """Merge word-level segments into full utterances.
+
+    Parameters
+    ----------
+    segments : list of dict
+        The word-level diarization results from WhisperX.
+    max_gap : float
+        Maximum allowed pause between words (in seconds) for them to be
+        merged into the same utterance.
+    """
+
     if not segments:
         return []
 
-    # The word segments returned by WhisperX are already in chronological
-    # order. Sorting again can actually scramble the sequence if any words
-    # have slightly misaligned timestamps (e.g. negative values).  To preserve
-    # the diarization order we simply iterate over the provided list.
-
-    grouped = []
-    first_speaker = segments[0].get("speaker") or "speaker"
-    current = {
-        "speaker": first_speaker,
-        "start": float(segments[0].get("start", segments[0].get("start_time", 0))),
-        "end": float(segments[0].get("end", segments[0].get("end_time", 0))),
-        "text": segments[0].get("text", segments[0].get("word", "")),
-    }
-
-    for seg in segments[1:]:
-        speaker = seg.get("speaker") or current["speaker"]
+    norm_segments = []
+    for seg in segments:
         start = float(seg.get("start", seg.get("start_time", 0)))
         end = float(seg.get("end", seg.get("end_time", 0)))
-        text = seg.get("text", seg.get("word", ""))
+        norm_segments.append(
+            {
+                "speaker": seg.get("speaker") or "speaker",
+                "start": start,
+                "end": end,
+                "text": seg.get("text", seg.get("word", "")),
+            }
+        )
 
-        seg["speaker"] = speaker
+    norm_segments.sort(key=lambda s: s["start"])
 
-        if speaker == current["speaker"]:
-            current["text"] += " " + text
-            current["end"] = end
+    grouped = []
+    current = norm_segments[0].copy()
+
+    for seg in norm_segments[1:]:
+        gap = seg["start"] - current["end"]
+        if seg["speaker"] == current["speaker"] and gap <= max_gap:
+            current["text"] += " " + seg["text"]
+            current["end"] = seg["end"]
         else:
             grouped.append(current)
-            current = {"speaker": speaker, "start": start, "end": end, "text": text}
+            current = seg.copy()
 
     grouped.append(current)
     return grouped
