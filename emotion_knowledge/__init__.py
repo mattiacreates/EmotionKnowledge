@@ -25,7 +25,10 @@ def _group_utterances(segments, max_gap: float = 0.7):
     norm_segments = []
     for seg in segments:
         start = float(seg.get("start", seg.get("start_time", 0)))
-        end = float(seg.get("end", seg.get("end_time", 0)))
+        end_val = seg.get("end")
+        if (end_val is None or float(end_val) == 0.0) and "end_time" in seg:
+            end_val = seg.get("end_time")
+        end = float(end_val if end_val is not None else 0)
         norm_segments.append(
             {
                 "speaker": seg.get("speaker") or "speaker",
@@ -48,7 +51,7 @@ def _group_utterances(segments, max_gap: float = 0.7):
         gap = seg["start"] - current["end"]
         if seg["speaker"] == current["speaker"] and gap <= max_gap:
             current["text"] += " " + seg["text"]
-            current["end"] = seg["end"]
+            current["end"] = seg.get("end", seg.get("end_time", current["end"]))
         else:
             grouped.append(current)
             current = seg.copy()
