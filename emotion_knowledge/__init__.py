@@ -35,7 +35,11 @@ def _group_utterances(segments, max_gap: float = 0.7):
             }
         )
 
-    norm_segments.sort(key=lambda s: s["start"])
+    # WhisperX already returns the word segments in chronological order.
+    # Sorting here can lead to problems when some words have missing or
+    # zero timestamps (e.g. due to alignment issues).  Such words would be
+    # moved to the beginning and end up in the wrong utterance.  We therefore
+    # keep the original order instead of sorting by ``start`` time.
 
     grouped = []
     current = norm_segments[0].copy()
