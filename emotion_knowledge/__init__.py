@@ -1,10 +1,27 @@
 import argparse
 import os
-from langchain_core.runnables import Runnable
-from langchain_core.tools import tool
-import whisper
 
-from .segment_saver import SegmentSaver
+try:
+    from langchain_core.runnables import Runnable
+    from langchain_core.tools import tool
+except Exception:  # pragma: no cover - optional dependency
+    class Runnable:  # minimal fallback so tests can import _group_utterances
+        def invoke(self, *args, **kwargs):  # pragma: no cover - not used in tests
+            raise ImportError("langchain-core is required for this feature")
+
+    def tool(func):  # pragma: no cover - noop decorator
+        return func
+
+try:  # whisper is only needed for the CLI workflow, not for tests
+    import whisper  # type: ignore
+except Exception:  # pragma: no cover - allow tests without whisper installed
+    whisper = None
+
+# Import SegmentSaver lazily to avoid requiring optional deps during tests
+try:
+    from .segment_saver import SegmentSaver
+except Exception:  # pragma: no cover - optional dependency
+    SegmentSaver = None
 
 
 def _group_utterances(segments, max_gap: float = 0.7):
@@ -23,12 +40,19 @@ def _group_utterances(segments, max_gap: float = 0.7):
         return []
 
     norm_segments = []
-    for seg in segments:
+    fallback_dur = 0.1
+    for i, seg in enumerate(segments):
         start = float(seg.get("start", seg.get("start_time", 0)))
         end_val = seg.get("end")
-        if (end_val is None or float(end_val) == 0.0) and "end_time" in seg:
+        if end_val is None or float(end_val) == 0.0:
             end_val = seg.get("end_time")
-        end = float(end_val if end_val is not None else 0)
+        if end_val is None or float(end_val) == 0.0:
+            if i + 1 < len(segments):
+                nxt = segments[i + 1]
+                end_val = nxt.get("start", nxt.get("start_time", start))
+            else:
+                end_val = start + fallback_dur
+        end = float(end_val)
         norm_segments.append(
             {
                 "speaker": seg.get("speaker") or "speaker",
@@ -51,7 +75,7 @@ def _group_utterances(segments, max_gap: float = 0.7):
         gap = seg["start"] - current["end"]
         if seg["speaker"] == current["speaker"] and gap <= max_gap:
             current["text"] += " " + seg["text"]
-            current["end"] = seg.get("end", seg.get("end_time", current["end"]))
+            current["end"] = seg["end"]
         else:
             grouped.append(current)
             current = seg.copy()
@@ -178,6 +202,8 @@ class WhisperXDiarizationWorkflow(Runnable):
         if segments:
             # Log the first segment for easier debugging
             print("First diarized segment:", segments[0])
+            if SegmentSaver is None:
+                raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
             utterances = _group_utterances(segments)
             for utt in utterances:
