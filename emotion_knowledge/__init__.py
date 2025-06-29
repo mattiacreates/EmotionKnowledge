@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 import whisper
 
 from .segment_saver import SegmentSaver
+from .fix_end_times import fix_end_times
 
 
 def _group_utterances(segments, max_gap: float = 0.7):

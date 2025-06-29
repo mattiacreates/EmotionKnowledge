@@ -3,3 +3,5 @@ whisperx
 langchain-core
 chromadb
 pydub
+pandas
+soundfile
