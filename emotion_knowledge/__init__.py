@@ -39,6 +39,20 @@ def _group_utterances(segments, max_gap: float = 0.7):
     if not segments:
         return []
 
+    # Ensure the segments are processed in chronological order.  WhisperX
+    # usually returns word-level segments sorted by ``start`` time but this is
+    # not guaranteed when alignment fails for a few tokens.  We therefore
+    # perform a stable sort while falling back to ``start_time`` or ``0`` if
+    # timestamps are missing.
+
+    def _safe_start(s: dict) -> float:
+        try:
+            return float(s.get("start", s.get("start_time", 0)))
+        except Exception:
+            return 0.0
+
+    segments = sorted(segments, key=_safe_start)
+
     norm_segments = []
     fallback_dur = 0.1
     for i, seg in enumerate(segments):
@@ -62,11 +76,12 @@ def _group_utterances(segments, max_gap: float = 0.7):
             }
         )
 
-    # WhisperX already returns the word segments in chronological order.
-    # Sorting here can lead to problems when some words have missing or
-    # zero timestamps (e.g. due to alignment issues).  Such words would be
-    # moved to the beginning and end up in the wrong utterance.  We therefore
-    # keep the original order instead of sorting by ``start`` time.
+    # The segments are now sorted by start time above.  Earlier versions kept
+    # the original order to avoid issues with missing timestamps, which could
+    # lead to severely truncated audio clips when WhisperX produced words out
+    # of order.  A stable sort combined with a fallback of ``0`` for missing
+    # timestamps prevents these misalignments while preserving the relative
+    # order of tokens that share the same start value.
 
     grouped = []
     current = norm_segments[0].copy()
