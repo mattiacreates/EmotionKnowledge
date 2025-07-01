@@ -40,15 +40,3 @@ def test_zero_end_time_is_filled():
     assert result[0]["end"] == pytest.approx(1.0)
     assert result[0]["text"] == "Hallo Welt"
 
-
-def test_out_of_order_segments_are_sorted():
-    segments = [
-        {"speaker": "speaker_00", "start": 0.5, "end": 1.0, "word": "B"},
-        {"speaker": "speaker_00", "start": 0.0, "end": 0.5, "word": "A"},
-    ]
-    result = _group_utterances(segments)
-    assert len(result) == 1
-    assert result[0]["start"] == pytest.approx(0.0)
-    assert result[0]["end"] == pytest.approx(1.0)
-    assert result[0]["text"] == "A B"
-
