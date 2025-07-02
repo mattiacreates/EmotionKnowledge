@@ -71,14 +71,42 @@ def _group_utterances(segments, max_gap: float = 0.7):
     grouped = []
     current = norm_segments[0].copy()
 
-    for seg in norm_segments[1:]:
+    # interjections shorter than this duration or consisting of a single word
+    # will be merged back into the surrounding utterance
+    interjection_dur = 1.0
+    i = 1
+    while i < len(norm_segments):
+        seg = norm_segments[i]
         gap = seg["start"] - current["end"]
+
+        # merge same-speaker segments when the pause is short
         if seg["speaker"] == current["speaker"] and gap <= max_gap:
             current["text"] += " " + seg["text"]
             current["end"] = seg["end"]
-        else:
-            grouped.append(current)
-            current = seg.copy()
+            i += 1
+            continue
+
+        # short interjection from another speaker followed by the original speaker
+        if (
+            seg["speaker"] != current["speaker"]
+            and (
+                seg["end"] - seg["start"] <= interjection_dur
+                or " " not in seg["text"].strip()
+            )
+            and i + 1 < len(norm_segments)
+            and norm_segments[i + 1]["speaker"] == current["speaker"]
+            and norm_segments[i + 1]["start"] - current["end"] <= interjection_dur
+        ):
+            current["text"] += " " + seg["text"]
+            next_seg = norm_segments[i + 1]
+            current["text"] += " " + next_seg["text"]
+            current["end"] = next_seg["end"]
+            i += 2
+            continue
+
+        grouped.append(current)
+        current = seg.copy()
+        i += 1
 
     grouped.append(current)
 
