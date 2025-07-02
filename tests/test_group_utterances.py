@@ -40,3 +40,14 @@ def test_zero_end_time_is_filled():
     assert result[0]["end"] == pytest.approx(1.0)
     assert result[0]["text"] == "Hallo Welt"
 
+
+def test_end_time_extended_to_next_start():
+    segments = [
+        {"speaker": "speaker_01", "start": 0.0, "end": 1.0, "word": "Hallo"},
+        {"speaker": "speaker_01", "start": 5.0, "end": 5.5, "word": "Welt"},
+    ]
+    result = _group_utterances(segments)
+    assert len(result) == 2
+    # end of first utterance should match start of second
+    assert result[0]["end"] == pytest.approx(result[1]["start"])
+
