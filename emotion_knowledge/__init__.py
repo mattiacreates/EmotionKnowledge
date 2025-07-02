@@ -81,6 +81,13 @@ def _group_utterances(segments, max_gap: float = 0.7):
             current = seg.copy()
 
     grouped.append(current)
+
+    # extend each utterance to start of the following one so the audio clip
+    # fully contains the spoken words even if WhisperX produced short end
+    # timestamps.  The final utterance keeps its original end time.
+    for i in range(len(grouped) - 1):
+        grouped[i]["end"] = grouped[i + 1]["start"]
+
     return grouped
 
 
