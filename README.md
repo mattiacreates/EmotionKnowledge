@@ -21,6 +21,11 @@ uses the text model `oliverguhr/german-sentiment-bert` and the audio model
 `superb/wav2vec2-base-superb-er`.  The predicted emotion label can be stored
 in a database column named `Emotion_Text`.
 
+An additional `AudioEmotionAnnotator` is available to annotate existing
+utterances purely based on their audio clips. It uses the Hugging Face model
+`superb/hubert-large-superb-er` and stores the label in a new field
+`emotion_annotated_text`.
+
 ## Default models
 
 `MultimodalEmotionTagger` automatically loads

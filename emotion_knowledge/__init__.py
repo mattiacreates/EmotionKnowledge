@@ -27,6 +27,12 @@ try:
 except Exception:  # pragma: no cover - optional dependency
     SegmentSaver = None
 
+try:
+    from .audio_emotion_annotator import AudioEmotionAnnotator, annotate_chromadb
+except Exception:  # pragma: no cover - optional dependency
+    AudioEmotionAnnotator = None
+    annotate_chromadb = None
+
 
 def _group_utterances(segments, max_gap: float = 0.7):
     """Merge word-level segments into full utterances.
