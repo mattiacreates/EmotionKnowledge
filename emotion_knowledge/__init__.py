@@ -1,5 +1,9 @@
 import argparse
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 try:
     from langchain_core.runnables import Runnable
@@ -146,8 +150,8 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
         result["segments"], align_model, metadata, audio_path, device=device
     )
     word_segments = aligned_output["word_segments"]
-    print(type(word_segments))
-    print(word_segments[:2])  # Now it's safe to preview
+    logger.debug(type(word_segments))
+    logger.debug(word_segments[:2])  # Now it's safe to preview
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
@@ -203,8 +207,7 @@ class TranscriptionOnlyWorkflow(Runnable):
 
     def invoke(self, audio_path: str) -> str:
         text = transcribe_audio_whisper.invoke(audio_path)
-        print("📄 Transkribierter Text:\n")
-        print(text)
+        logger.info("\ud83d\udcc4 Transkribierter Text:\n%s", text)
         return text
 
 
@@ -231,12 +234,11 @@ class WhisperXDiarizationWorkflow(Runnable):
             text = str(result)
             segments = []
 
-        print("📄 Transkription mit Sprecherlabels:\n")
-        print(text)
+        logger.info("\ud83d\udcc4 Transkription mit Sprecherlabels:\n%s", text)
 
         if segments:
             # Log the first segment for easier debugging
-            print("First diarized segment:", segments[0])
+            logger.debug("First diarized segment: %s", segments[0])
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
