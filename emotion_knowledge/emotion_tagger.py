@@ -7,7 +7,9 @@ class MultimodalEmotionTagger:
     def __init__(
         self,
         text_model: str = "oliverguhr/german-sentiment-bert",
-        audio_model: str = "speechbrain/emotion-recognition-wav2vec2",
+        # the original SpeechBrain model was removed from the hub. Use
+        # a publicly available alternative for speech emotion recognition.
+        audio_model: str = "superb/wav2vec2-base-superb-er",
     ) -> None:
         self.text_classifier = pipeline("text-classification", model=text_model)
         self.audio_classifier = pipeline("audio-classification", model=audio_model)
