@@ -22,16 +22,17 @@ uses the text model `oliverguhr/german-sentiment-bert` and the audio model
 in your own data store, for example in a column named `Emotion_Text`.
 
 An additional `AudioEmotionAnnotator` is available to annotate existing
-utterances purely based on their audio clips. It uses the Hugging Face model
-`superb/hubert-large-superb-er` and stores the label in a new field
-`emotion_annotated_text`.
+utterances purely based on their audio clips. It now wraps an emotion model
+and by default loads `padmalcom/wav2vec2-large-emotion-detection-german`.
+The predicted label is added to a new field `emotion_annotated_text`.
 
 ## Default models
 
 `MultimodalEmotionTagger` automatically loads
 `oliverguhr/german-sentiment-bert` for text classification and
 `superb/wav2vec2-base-superb-er` for speech emotion recognition.  The
-transcription workflow uses the open-source Whisper model (base size) to
+`AudioEmotionAnnotator` uses `padmalcom/wav2vec2-large-emotion-detection-german`.
+The transcription workflow uses the open-source Whisper model (base size) to
 convert German audio to text.
 
 ## Usage
