@@ -1,9 +1,9 @@
 # Emotion Knowledge
 
 This repository provides a minimal example of turning audio into text
-and annotating that text with emotions. The first implementation uses
-text-only emotion classification so it can be easily extended later to
-multimodal approaches.
+and annotating that text with emotions. It includes a workflow for
+transcription and already provides a multimodal emotion classifier that
+combines text and audio cues.
 
 ## Overview
 
@@ -18,8 +18,8 @@ predicting emotions from text and the corresponding audio.
 recognition model.  The class loads two Hugging Face pipelines – one for
 `text-classification` and one for `audio-classification`.  By default it
 uses the text model `oliverguhr/german-sentiment-bert` and the audio model
-`superb/wav2vec2-base-superb-er`.  The predicted emotion label can be stored
-in a database column named `Emotion_Text`.
+`superb/wav2vec2-base-superb-er`.  You can store the predicted emotion label
+in your own data store, for example in a column named `Emotion_Text`.
 
 An additional `AudioEmotionAnnotator` is available to annotate existing
 utterances purely based on their audio clips. It uses the Hugging Face model
@@ -31,8 +31,8 @@ utterances purely based on their audio clips. It uses the Hugging Face model
 `MultimodalEmotionTagger` automatically loads
 `oliverguhr/german-sentiment-bert` for text classification and
 `superb/wav2vec2-base-superb-er` for speech emotion recognition.  The
-transcription workflow relies on `openai/whisper-base` to convert German
-audio to text.
+transcription workflow uses the open-source Whisper model (base size) to
+convert German audio to text.
 
 ## Usage
 
@@ -56,7 +56,7 @@ notebook or script:
 from emotion_knowledge.emotion_tagger import MultimodalEmotionTagger
 tagger = MultimodalEmotionTagger()
 emotion = tagger.invoke(text, "path/to/audio.wav")
-db["Emotion_Text"] = emotion
+# store ``emotion`` alongside your text or audio entry
 ```
 
 Add `--diarize` to enable speaker diarization with WhisperX using the
