@@ -1,6 +1,10 @@
 import os
 import sys
+import logging
 import pytest
+
+# Silence package logs during tests
+logging.disable(logging.CRITICAL)
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from emotion_knowledge import _group_utterances
