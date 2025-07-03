@@ -33,6 +33,12 @@ except Exception:  # pragma: no cover - optional dependency
     AudioEmotionAnnotator = None
     annotate_chromadb = None
 
+try:
+    from .emotion_models import EmotionModel, MultimodalEmotionModel
+except Exception:  # pragma: no cover - optional dependency
+    EmotionModel = None
+    MultimodalEmotionModel = None
+
 
 def _group_utterances(segments, max_gap: float = 0.7):
     """Merge word-level segments into full utterances.

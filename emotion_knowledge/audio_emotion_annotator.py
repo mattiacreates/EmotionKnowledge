@@ -1,17 +1,22 @@
 from __future__ import annotations
 import os
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from langchain_core.runnables import Runnable
-from transformers import pipeline
+
+from .emotion_models import EmotionModel
 
 
 class AudioEmotionAnnotator(Runnable):
     """Annotate utterances with the dominant emotion from audio."""
 
-    def __init__(self, model_name: str = "superb/hubert-large-superb-er") -> None:
-        self.classifier = pipeline("audio-classification", model=model_name)
-        self.label_map = {
+    def __init__(
+        self,
+        emotion_model: Optional[EmotionModel] = None,
+        label_map: Optional[Dict[str, str]] = None,
+    ) -> None:
+        self.emotion_model = emotion_model or EmotionModel()
+        self.label_map = label_map or {
             "angry": "Wut",
             "anger": "Wut",
             "sad": "Traurigkeit",
@@ -30,10 +35,9 @@ class AudioEmotionAnnotator(Runnable):
         text = entry.get("text", "")
         label = "Neutral"
         if audio_path and os.path.exists(audio_path):
-            result = self.classifier(audio_path)
-            if result:
-                label = result[0]["label"]
-                label = self.label_map.get(label.lower(), label)
+            raw_label = self.emotion_model.predict(audio_path)
+            if raw_label:
+                label = self.label_map.get(raw_label.lower(), raw_label)
         entry["emotion_annotated_text"] = f"[{label}] {text}".strip()
         return entry
 
