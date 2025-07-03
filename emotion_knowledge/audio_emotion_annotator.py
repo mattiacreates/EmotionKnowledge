@@ -16,19 +16,8 @@ class AudioEmotionAnnotator(Runnable):
         label_map: Optional[Dict[str, str]] = None,
     ) -> None:
         self.emotion_model = emotion_model or EmotionModel()
-        self.label_map = label_map or {
-            "angry": "Wut",
-            "anger": "Wut",
-            "sad": "Traurigkeit",
-            "sadness": "Traurigkeit",
-            "happy": "Freude",
-            "happiness": "Freude",
-            "surprise": "Überraschung",
-            "fear": "Angst",
-            "disgust": "Ekel",
-            "calm": "Gelassenheit",
-            "neutral": "Neutral",
-        }
+        # keep an optional label_map for compatibility, but default to no mapping
+        self.label_map = label_map or {}
 
     def invoke(self, entry: Dict[str, Any]) -> Dict[str, Any]:
         audio_path = entry.get("audio_clip_path")
