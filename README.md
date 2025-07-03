@@ -17,6 +17,14 @@ multimodal approaches.
 The code is structured so additional components can be inserted, such as
 an audio-based emotion model.
 
+## Multimodal emotion tagging
+
+`MultimodalEmotionTagger` combines a text classifier and a speech emotion
+recognition model.  The class loads two Hugging Face pipelines – one for
+`text-classification` and one for `audio-classification`.  By default it uses
+models that understand German.  The predicted emotion label can be stored in a
+database column named `Emotion_Text`.
+
 ## Default models
 
 The built-in classes work with German data. `AudioTranscriber` uses
@@ -37,6 +45,17 @@ Run a transcription:
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav
+```
+
+To enrich the results with an emotion label based on both the transcribed text
+and the original audio you can load ``MultimodalEmotionTagger`` in your own
+notebook or script:
+
+```python
+from emotion_knowledge.emotion_tagger import MultimodalEmotionTagger
+tagger = MultimodalEmotionTagger()
+emotion = tagger.invoke(text, "path/to/audio.wav")
+db["Emotion_Text"] = emotion
 ```
 
 Add `--diarize` to enable speaker diarization with WhisperX. When diarization
