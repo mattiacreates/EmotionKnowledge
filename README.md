@@ -39,11 +39,17 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-Add `--diarize` to enable speaker diarization with WhisperX:
+Add `--diarize` to enable speaker diarization with WhisperX. When diarization
+is enabled you can also store each speaker **utterance** in a local ChromaDB
+instance by providing a database path and output directory for the audio clips.
 
 ```bash
-python -m emotion_knowledge path/to/audio.wav --diarize
+python -m emotion_knowledge path/to/audio.wav --diarize \
+    --db-path mydb --clip-dir clips
 ```
+
+Use `--whisperx-model` to choose the WhisperX model size when diarization is
+enabled. The default is `medium`.
 
 The script prints the resulting transcription to the console.
 
