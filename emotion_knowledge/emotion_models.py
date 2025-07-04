@@ -10,11 +10,21 @@ class EmotionModel:
         # load from local cache if available, no auth token required
         self.classifier = pipeline("audio-classification", model=model_name)
 
+    def predict_scores(self, audio_path: str) -> dict[str, float]:
+        """Return a mapping of emotion label to score for the given audio file."""
+        results = self.classifier(audio_path)
+        scores: dict[str, float] = {}
+        for res in results or []:
+            label = res.get("label")
+            if label:
+                scores[label] = res.get("score", 0.0)
+        return scores
+
     def predict(self, audio_path: str) -> str:
         """Return the top emotion label for the given audio file."""
-        result = self.classifier(audio_path)
-        if result:
-            return result[0].get("label", "")
+        scores = self.predict_scores(audio_path)
+        if scores:
+            return max(scores, key=scores.get)
         return ""
 
 
