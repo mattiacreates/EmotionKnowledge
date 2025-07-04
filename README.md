@@ -24,7 +24,8 @@ in your own data store, for example in a column named `Emotion_Text`.
 An additional `AudioEmotionAnnotator` is available to annotate existing
 utterances purely based on their audio clips. It now wraps an emotion model
 and by default loads `padmalcom/wav2vec2-large-emotion-detection-german`.
-The predicted label is added to a new field `emotion_annotated_text`.
+The predicted label is added to a new field `emotion_annotated_text` and the
+model's confidence score is stored in `emotion_confidence`.
 
 ## Default models
 

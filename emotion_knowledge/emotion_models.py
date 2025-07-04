@@ -10,12 +10,15 @@ class EmotionModel:
         # load from local cache if available, no auth token required
         self.classifier = pipeline("audio-classification", model=model_name)
 
-    def predict(self, audio_path: str) -> str:
-        """Return the top emotion label for the given audio file."""
+    def predict(self, audio_path: str) -> tuple[str, float]:
+        """Return the top emotion label and confidence for the given audio file."""
         result = self.classifier(audio_path)
         if result:
-            return result[0].get("label", "")
-        return ""
+            top = result[0]
+            label = top.get("label", "")
+            score = float(top.get("score", 0.0))
+            return label, score
+        return "", 0.0
 
 
 class MultimodalEmotionModel:
@@ -32,7 +35,7 @@ class MultimodalEmotionModel:
         self.neutral_label = neutral_label.lower()
 
     def predict(self, audio_path: str, text: str) -> str:
-        audio_label = self.audio_model.predict(audio_path)
+        audio_label, _ = self.audio_model.predict(audio_path)
         text_label = ""
         if text:
             text_res = self.text_classifier(text)

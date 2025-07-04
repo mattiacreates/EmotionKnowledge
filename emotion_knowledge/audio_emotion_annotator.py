@@ -23,16 +23,18 @@ class AudioEmotionAnnotator(Runnable):
         audio_path = entry.get("audio_clip_path")
         text = entry.get("text", "")
         label = "Neutral"
+        confidence = 0.0
         if audio_path and os.path.exists(audio_path):
-            raw_label = self.emotion_model.predict(audio_path)
+            raw_label, confidence = self.emotion_model.predict(audio_path)
             if raw_label:
                 label = self.label_map.get(raw_label.lower(), raw_label)
         entry["emotion_annotated_text"] = f"[{label}] {text}".strip()
+        entry["emotion_confidence"] = confidence
         return entry
 
 
 def annotate_chromadb(db_path: str, collection_name: str = "segments") -> None:
-    """Add emotion_annotated_text to each entry in a ChromaDB collection."""
+    """Add emotion_annotated_text and confidence to each entry in a ChromaDB collection."""
     import chromadb
 
     annotator = AudioEmotionAnnotator()
@@ -48,6 +50,7 @@ def annotate_chromadb(db_path: str, collection_name: str = "segments") -> None:
         entry["text"] = doc
         entry = annotator.invoke(entry)
         meta["emotion_annotated_text"] = entry["emotion_annotated_text"]
+        meta["emotion_confidence"] = entry["emotion_confidence"]
         new_metas.append(meta)
     if ids:
         collection.update(ids=ids, metadatas=new_metas)
