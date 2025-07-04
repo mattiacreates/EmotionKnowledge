@@ -2,7 +2,12 @@ from __future__ import annotations
 import os
 from typing import Dict, Any, Optional
 
-from langchain_core.runnables import Runnable
+try:
+    from langchain_core.runnables import Runnable
+except Exception:  # pragma: no cover - optional dependency
+    class Runnable:  # minimal fallback so tests can import module
+        def invoke(self, *args, **kwargs):  # pragma: no cover - not used in tests
+            raise ImportError("langchain-core is required for this feature")
 
 from .emotion_models import EmotionModel
 
