@@ -23,10 +23,15 @@ class AudioEmotionAnnotator(Runnable):
         audio_path = entry.get("audio_clip_path")
         text = entry.get("text", "")
         label = "Neutral"
+        scores: Dict[str, float] = {}
         if audio_path and os.path.exists(audio_path):
-            raw_label = self.emotion_model.predict(audio_path)
-            if raw_label:
+            scores = self.emotion_model.predict_scores(audio_path)
+            if scores:
+                raw_label = max(scores, key=scores.get)
                 label = self.label_map.get(raw_label.lower(), raw_label)
+                entry["emotion_scores"] = scores
+                entry["emotion_top_label"] = raw_label
+
         entry["emotion_annotated_text"] = f"[{label}] {text}".strip()
         return entry
 
