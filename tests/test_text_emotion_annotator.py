@@ -21,13 +21,15 @@ class FakeTextModel(TextEmotionModel):
 def test_text_emotion_annotator_keeps_other_fields():
     entry = {
         "text": "Hallo Welt",
-        "emotion_annotated_text": "[anger] Hallo Welt",
-        "emotion_confidence": 0.5,
+        "audio_emotion_label": "anger",
+        "audio_emotion_confidence": 0.5,
+        "audio_text": "Hallo Welt",
     }
     annotator = TextEmotionAnnotator(emotion_model=FakeTextModel())
     result = annotator.invoke(entry)
     assert result["text_emotion_label"] == "Freude"
     assert result["text_emotion_confidence"] == pytest.approx(0.92)
-    assert result["emotion_annotated_text"] == "[anger] Hallo Welt"
-    assert result["emotion_confidence"] == pytest.approx(0.5)
+    assert result["audio_emotion_label"] == "anger"
+    assert result["audio_emotion_confidence"] == pytest.approx(0.5)
+    assert result["audio_text"] == "Hallo Welt"
     assert FakeTextModel.called_with == entry["text"]
