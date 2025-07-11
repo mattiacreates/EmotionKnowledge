@@ -38,7 +38,7 @@ emotion information untouched.
 `oliverguhr/german-sentiment-bert` for text classification and
 `superb/wav2vec2-base-superb-er` for speech emotion recognition.  The
 `AudioEmotionAnnotator` uses `padmalcom/wav2vec2-large-emotion-detection-german`.
-`TextEmotionAnnotator` defaults to `oliverguhr/german-emotion-bert` for
+`TextEmotionAnnotator` defaults to `oliverguhr/german-sentiment-bert` for
 classifying emotions in text.
 The transcription workflow uses the open-source Whisper model (base size) to
 convert German audio to text.
