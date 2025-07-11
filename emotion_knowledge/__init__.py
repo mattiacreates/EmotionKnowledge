@@ -34,10 +34,20 @@ except Exception:  # pragma: no cover - optional dependency
     annotate_chromadb = None
 
 try:
-    from .emotion_models import EmotionModel, MultimodalEmotionModel
+    from .emotion_models import (
+        EmotionModel,
+        MultimodalEmotionModel,
+        TextEmotionModel,
+    )
 except Exception:  # pragma: no cover - optional dependency
     EmotionModel = None
     MultimodalEmotionModel = None
+    TextEmotionModel = None
+
+try:
+    from .text_emotion_annotator import TextEmotionAnnotator
+except Exception:  # pragma: no cover - optional dependency
+    TextEmotionAnnotator = None
 
 
 def _group_utterances(segments, max_gap: float = 0.7):
