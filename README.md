@@ -27,12 +27,19 @@ and by default loads `padmalcom/wav2vec2-large-emotion-detection-german`.
 The predicted label is added to a new field `emotion_annotated_text` and the
 model's confidence score is stored in `emotion_confidence`.
 
+For text-only emotion detection the package offers `TextEmotionAnnotator`
+which uses a German BERT model. It adds the fields `text_emotion_label` and
+`text_emotion_confidence` to an entry while leaving any existing audio based
+emotion information untouched.
+
 ## Default models
 
 `MultimodalEmotionTagger` automatically loads
 `oliverguhr/german-sentiment-bert` for text classification and
 `superb/wav2vec2-base-superb-er` for speech emotion recognition.  The
 `AudioEmotionAnnotator` uses `padmalcom/wav2vec2-large-emotion-detection-german`.
+`TextEmotionAnnotator` defaults to `oliverguhr/german-emotion-bert` for
+classifying emotions in text.
 The transcription workflow uses the open-source Whisper model (base size) to
 convert German audio to text.
 

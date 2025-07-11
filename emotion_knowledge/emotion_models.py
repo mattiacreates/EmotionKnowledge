@@ -21,6 +21,23 @@ class EmotionModel:
         return "", 0.0
 
 
+class TextEmotionModel:
+    """Wrapper around a text-classification pipeline for emotion detection."""
+
+    def __init__(self, model_name: str = "oliverguhr/german-emotion-bert") -> None:
+        self.classifier = pipeline("text-classification", model=model_name)
+
+    def predict(self, text: str) -> tuple[str, float]:
+        """Return the top emotion label and confidence for the given text."""
+        result = self.classifier(text)
+        if result:
+            top = result[0]
+            label = top.get("label", "")
+            score = float(top.get("score", 0.0))
+            return label, score
+        return "", 0.0
+
+
 class MultimodalEmotionModel:
     """Simple fusion of an audio and text emotion model."""
 
