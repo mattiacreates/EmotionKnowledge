@@ -24,7 +24,8 @@ def test_audio_annotator_uses_injected_model(monkeypatch, tmp_path):
     annotator = AudioEmotionAnnotator(emotion_model=model)
     entry = {"audio_clip_path": str(tmp_path / "audio.wav"), "text": "Hallo"}
     result = annotator.invoke(entry)
-    assert result["emotion_annotated_text"] == "[anger] Hallo"
-    assert result["emotion_confidence"] == pytest.approx(0.85)
+    assert result["audio_emotion_label"] == "anger"
+    assert result["audio_emotion_confidence"] == pytest.approx(0.85)
+    assert result["audio_text"] == "Hallo"
     assert FakeModel.called_with == entry["audio_clip_path"]
 
