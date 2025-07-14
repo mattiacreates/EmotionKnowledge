@@ -85,3 +85,35 @@ enabled. The default is `medium`.
 
 The script prints the resulting transcription to the console.
 
+## Running on Google Colab
+
+You can also run the workflow on [Google Colab](https://colab.research.google.com/)
+with a GPU runtime. The following snippet installs the required libraries,
+clones the repository and transcribes an audio file:
+
+```python
+# start in a clean workspace
+%cd /content
+!rm -rf EmotionKnowledge
+
+# install CUDA compatible PyTorch
+%pip install --upgrade pip
+%pip install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# clone this repo and install the dependencies
+!git clone https://github.com/mattiacreates/EmotionKnowledge.git
+%pip install -r EmotionKnowledge/requirements.txt
+
+# optional: extra models used by the annotators
+%pip install langchain transformers openai-whisper
+
+%cd EmotionKnowledge
+!python -m emotion_knowledge /path/to/audio.wav --diarize \
+    --whisperx-model medium
+```
+
+Replace `/path/to/audio.wav` with a file from your Google Drive or an uploaded
+sample. The results are printed to the notebook and, when diarization is
+enabled, stored in the local `segment_db` directory.
+
