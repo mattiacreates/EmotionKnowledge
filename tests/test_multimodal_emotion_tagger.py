@@ -1,44 +1,11 @@
 import os
 import sys
-import tempfile
 from pydub import AudioSegment
 import pytest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from emotion_knowledge.emotion_tagger import MultimodalEmotionTagger
 from emotion_knowledge.segment_saver import SegmentSaver
-
-
-
-
-def test_multimodal_combines_text_and_audio(monkeypatch):
-    calls = []
-
-    def fake_pipeline(task, model=None):
-        calls.append((task, model))
-        if task == "text-classification":
-            return lambda text: [{"label": "pos", "score": 0.6}]
-        elif task == "audio-classification":
-            return lambda path: [
-                {"label": "neg", "score": 0.5},
-                {"label": "pos", "score": 0.4},
-            ]
-        else:
-            raise AssertionError("unexpected task")
-
-    monkeypatch.setattr(
-        "emotion_knowledge.emotion_tagger.pipeline", fake_pipeline
-    )
-
-    tagger = MultimodalEmotionTagger(
-        text_model="text-model", audio_model="audio-model"
-    )
-    label = tagger.invoke("hi", "dummy.wav")
-
-    assert label == "pos"
-    assert ("text-classification", "text-model") in calls
-    assert ("audio-classification", "audio-model") in calls
 
 
 class FakeCollection:

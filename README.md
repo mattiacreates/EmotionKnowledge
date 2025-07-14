@@ -2,25 +2,12 @@
 
 This repository provides a minimal example of turning audio into text
 and annotating that text with emotions. It includes a workflow for
-transcription and already provides a multimodal emotion classifier that
-combines text and audio cues.
+transcription and provides utilities to annotate text or audio with emotions.
 
 ## Overview
 
 EmotionKnowledge offers a CLI workflow for German speech transcription.
-It can optionally run speaker diarization and store each utterance in a
-database.  The package also provides a `MultimodalEmotionTagger` for
-predicting emotions from text and the corresponding audio.
-
-## Multimodal emotion tagging
-
-`MultimodalEmotionTagger` combines a text classifier and a speech emotion
-recognition model.  The class loads two Hugging Face pipelines – one for
-`text-classification` and one for `audio-classification`.  By default it
-uses the text model `oliverguhr/german-sentiment-bert` and the audio model
-`superb/wav2vec2-base-superb-er`.  You can store the predicted emotion label
-in your own data store, for example in a column named `Emotion_Text`.
-
+It can optionally run speaker diarization and store each utterance in a database.
 An additional `AudioEmotionAnnotator` is available to annotate existing
 utterances purely based on their audio clips. It now wraps an emotion model
 and by default loads `padmalcom/wav2vec2-large-emotion-detection-german`.
@@ -35,9 +22,6 @@ emotion information untouched.
 
 ## Default models
 
-`MultimodalEmotionTagger` automatically loads
-`oliverguhr/german-sentiment-bert` for text classification and
-`superb/wav2vec2-base-superb-er` for speech emotion recognition.  The
 `AudioEmotionAnnotator` uses `padmalcom/wav2vec2-large-emotion-detection-german`.
 `TextEmotionAnnotator` defaults to `oliverguhr/german-sentiment-bert` for
 classifying emotions in text.
@@ -58,18 +42,6 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-To enrich the results with an emotion label based on both the transcribed text
-and the original audio you can load ``MultimodalEmotionTagger`` in your own
-notebook or script:
-
-```python
-from emotion_knowledge.emotion_tagger import MultimodalEmotionTagger
-tagger = MultimodalEmotionTagger()
-emotion = tagger.invoke(text, "path/to/audio.wav")
-# store ``emotion`` alongside your text or audio entry
-```
-
-Add `--diarize` to enable speaker diarization with WhisperX using the
 `WhisperXDiarizationWorkflow`.  When diarization is enabled you can also
 store each speaker **utterance** in a local ChromaDB instance via
 `SegmentSaver` by providing a database path and output directory for the
