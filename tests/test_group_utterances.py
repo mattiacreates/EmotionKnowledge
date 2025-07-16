@@ -99,3 +99,13 @@ def test_multi_word_interjection_over_one_second_not_merged():
     assert result[1]["text"] == "ach so"
     assert result[2]["text"] == "Welt"
 
+
+def test_same_segment_id_overrides_gap():
+    segments = [
+        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo", "segment": 0},
+        {"speaker": "s1", "start": 2.0, "end": 2.5, "word": "Welt", "segment": 0},
+    ]
+    result = _group_utterances(segments, max_gap=0.1)
+    assert len(result) == 1
+    assert result[0]["text"] == "Hallo Welt"
+
