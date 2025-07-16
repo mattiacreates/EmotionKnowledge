@@ -50,7 +50,7 @@ except Exception:  # pragma: no cover - optional dependency
     TextEmotionAnnotator = None
 
 
-def _group_utterances(segments, max_gap: float = 0.7):
+def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
     """Merge word-level segments into full utterances.
 
     Parameters
@@ -85,8 +85,58 @@ def _group_utterances(segments, max_gap: float = 0.7):
                 "start": start,
                 "end": end,
                 "text": seg.get("text", seg.get("word", "")),
+                "segment": seg.get("segment"),
             }
         )
+
+    use_segment_ids = False
+    if segments_info is not None:
+        use_segment_ids = True
+    elif all(seg.get("segment") is not None for seg in norm_segments):
+        use_segment_ids = True
+
+    # If we have segment ids we simply merge by those first
+    if use_segment_ids:
+        ordered_groups = []
+        if segments_info is not None:
+            for idx, _info in enumerate(segments_info):
+                words_for_seg = [w for w in norm_segments if w.get("segment") == idx]
+                if words_for_seg:
+                    ordered_groups.append(words_for_seg)
+        else:
+            current_id = norm_segments[0].get("segment")
+            buf = []
+            for w in norm_segments:
+                if w.get("segment") != current_id:
+                    if buf:
+                        ordered_groups.append(buf)
+                    buf = [w]
+                    current_id = w.get("segment")
+                else:
+                    buf.append(w)
+            if buf:
+                ordered_groups.append(buf)
+
+        grouped = []
+        for group in ordered_groups:
+            speaker_counts = {}
+            for w in group:
+                sp = w["speaker"]
+                speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
+            majority_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
+            grouped.append(
+                {
+                    "speaker": majority_speaker,
+                    "start": group[0]["start"],
+                    "end": group[-1]["end"],
+                    "text": " ".join(w["text"] for w in group),
+                }
+            )
+
+        for i in range(len(grouped) - 1):
+            grouped[i]["end"] = grouped[i + 1]["start"]
+
+        return grouped
 
     # WhisperX already returns the word segments in chronological order.
     # Sorting here can lead to problems when some words have missing or
@@ -175,6 +225,8 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     logger.debug(type(word_segments))
     logger.debug(word_segments[:2])  # Now it's safe to preview
 
+    aligned_segments = aligned_output.get("segments", [])
+
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
@@ -184,6 +236,17 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     )
 
     words = result_with_speakers["word_segments"]
+
+    # attach segment index to each word
+    seg_idx = 0
+    if aligned_segments:
+        seg_starts = [float(s.get("start", s.get("start_time", 0))) for s in aligned_segments]
+        seg_starts.append(float("inf"))
+        for w in words:
+            start_val = float(w.get("start", w.get("start_time", 0)))
+            while seg_idx + 1 < len(seg_starts) and start_val >= seg_starts[seg_idx + 1]:
+                seg_idx += 1
+            w["segment"] = seg_idx
 
     # Build a formatted string while keeping the raw segment information so it
     # can be persisted elsewhere.
@@ -210,7 +273,7 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
         lines.append(f"[{current_speaker}] {current_line.strip()}")
 
     text = "\n".join(lines)
-    return {"text": text, "segments": words}
+    return {"text": text, "segments": words, "segments_info": aligned_segments}
 
 
 @tool
@@ -264,7 +327,9 @@ class WhisperXDiarizationWorkflow(Runnable):
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
-            utterances = _group_utterances(segments)
+            utterances = _group_utterances(
+                segments, segments_info=result.get("segments_info")
+            )
             for utt in utterances:
                 utt["audio_path"] = audio_path
                 saver.invoke(utt)
