@@ -1,29 +1,32 @@
 # Emotion Knowledge
 
 This repository provides a minimal example of turning audio into text
-and annotating that text with emotions. The first implementation uses
-text-only emotion classification so it can be easily extended later to
-multimodal approaches.
+and annotating that text with emotions. It includes a workflow for
+transcription and provides utilities to annotate text or audio with emotions.
 
 ## Overview
 
-1. **AudioTranscriber** – converts an audio file to text using the
-   Hugging Face `transformers` ASR pipeline (Whisper).
-2. **TextEmotionAnnotator** – prompts a Llama model to label the emotion
-   of the text.
-3. **EmotionTranscriptionPipeline** – orchestrates the two steps. It
-   returns both the plain transcription and the emotion-enriched text.
+EmotionKnowledge offers a CLI workflow for German speech transcription.
+It can optionally run speaker diarization and store each utterance in a database.
+An additional `AudioEmotionAnnotator` is available to annotate existing
+utterances purely based on their audio clips. It now wraps an emotion model
+and by default loads `padmalcom/wav2vec2-large-emotion-detection-german`.
+The predicted label is stored in `audio_emotion_label` and the model's
+confidence score in `audio_emotion_confidence`. The transcribed text is kept
+in a separate field `audio_text`.
 
-The code is structured so additional components can be inserted, such as
-an audio-based emotion model.
+For text-only emotion detection the package offers `TextEmotionAnnotator`
+which uses a German BERT model. It adds the fields `text_emotion_label` and
+`text_emotion_confidence` to an entry while leaving any existing audio based
+emotion information untouched.
 
 ## Default models
 
-The built-in classes work with German data. `AudioTranscriber` uses
-`openai/whisper-base` for speech recognition and passes
-`language='de'` when invoking the pipeline. `TextEmotionAnnotator` uses
-``meta-llama/Meta-Llama-3-8B-Instruct`` to generate a single emotion
-label.
+`AudioEmotionAnnotator` uses `padmalcom/wav2vec2-large-emotion-detection-german`.
+`TextEmotionAnnotator` defaults to `oliverguhr/german-sentiment-bert` for
+classifying emotions in text.
+The transcription workflow uses the open-source Whisper model (base size) to
+convert German audio to text.
 
 ## Usage
 
@@ -39,9 +42,10 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
-Add `--diarize` to enable speaker diarization with WhisperX. When diarization
-is enabled you can also store each speaker **utterance** in a local ChromaDB
-instance by providing a database path and output directory for the audio clips.
+`WhisperXDiarizationWorkflow`.  When diarization is enabled you can also
+store each speaker **utterance** in a local ChromaDB instance via
+`SegmentSaver` by providing a database path and output directory for the
+audio clips.
 
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize \
@@ -52,4 +56,36 @@ Use `--whisperx-model` to choose the WhisperX model size when diarization is
 enabled. The default is `medium`.
 
 The script prints the resulting transcription to the console.
+
+## Running on Google Colab
+
+You can also run the workflow on [Google Colab](https://colab.research.google.com/)
+with a GPU runtime. The following snippet installs the required libraries,
+clones the repository and transcribes an audio file:
+
+```python
+# start in a clean workspace
+%cd /content
+!rm -rf EmotionKnowledge
+
+# install CUDA compatible PyTorch
+%pip install --upgrade pip
+%pip install torch==2.3.0 torchvision==0.18.0 torchaudio==2.3.0 \
+    --index-url https://download.pytorch.org/whl/cu118
+
+# clone this repo and install the dependencies
+!git clone https://github.com/mattiacreates/EmotionKnowledge.git
+%pip install -r EmotionKnowledge/requirements.txt
+
+# optional: extra models used by the annotators
+%pip install langchain transformers openai-whisper
+
+%cd EmotionKnowledge
+!python -m emotion_knowledge /path/to/audio.wav --diarize \
+    --whisperx-model medium
+```
+
+Replace `/path/to/audio.wav` with a file from your Google Drive or an uploaded
+sample. The results are printed to the notebook and, when diarization is
+enabled, stored in the local `segment_db` directory.
 

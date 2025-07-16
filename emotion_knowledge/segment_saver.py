@@ -2,9 +2,17 @@ import os
 import uuid
 from typing import Any, Dict
 
-from langchain_core.runnables import Runnable
+try:
+    from langchain_core.runnables import Runnable
+except Exception:  # pragma: no cover - optional dependency
+    class Runnable:  # minimal fallback so tests can import module
+        def invoke(self, *args, **kwargs):  # pragma: no cover - not used in tests
+            raise ImportError("langchain-core is required for this feature")
 from pydub import AudioSegment
 import chromadb
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class SegmentSaver(Runnable):
@@ -20,7 +28,7 @@ class SegmentSaver(Runnable):
         """Slice the audio segment and store its metadata."""
         audio_path = segment.get("audio_path")
         if not audio_path or not os.path.exists(audio_path):
-            print("Audio path missing or invalid for segment", segment)
+            logger.warning("Audio path missing or invalid for segment %s", segment)
             return {}
 
         # WhisperX may produce either "start"/"end" or "start_time"/"end_time".
@@ -31,14 +39,14 @@ class SegmentSaver(Runnable):
             start_val = segment["start_time"]
             end_val = segment["end_time"]
         else:
-            print("Skipping segment due to missing time keys", list(segment.keys()))
+            logger.warning("Skipping segment due to missing time keys %s", list(segment.keys()))
             return {}
 
         try:
             start_ms = max(0, int(float(start_val) * 1000))
             end_ms = max(start_ms, int(float(end_val) * 1000))
         except Exception as exc:
-            print("Invalid start/end values", start_val, end_val, exc)
+            logger.error("Invalid start/end values %s %s %s", start_val, end_val, exc)
             return {}
 
         speaker = segment.get("speaker", "speaker").lower()
@@ -49,7 +57,13 @@ class SegmentSaver(Runnable):
         audio[start_ms:end_ms].export(clip_path, format="wav")
 
         duration_ms = end_ms - start_ms
-        print(f"Saved clip {clip_path} ({duration_ms} ms) speaker={speaker} text='{segment.get('text','')}'")
+        logger.info(
+            "Saved clip %s (%d ms) speaker=%s text='%s'",
+            clip_path,
+            duration_ms,
+            speaker,
+            segment.get("text", ""),
+        )
 
         doc_id = uuid.uuid4().hex
         metadata = {
