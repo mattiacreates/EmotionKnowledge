@@ -1,6 +1,10 @@
 from __future__ import annotations
 
-from transformers import pipeline
+try:
+    from transformers import pipeline
+except Exception:  # pragma: no cover - optional dependency
+    def pipeline(*args, **kwargs):  # type: ignore[override]
+        raise ImportError("transformers is required for this feature")
 
 
 class EmotionModel:

@@ -50,7 +50,7 @@ except Exception:  # pragma: no cover - optional dependency
     TextEmotionAnnotator = None
 
 
-def _group_utterances(segments, max_gap: float = 0.7):
+def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
     """Merge word-level segments into full utterances.
 
     Parameters
@@ -64,6 +64,8 @@ def _group_utterances(segments, max_gap: float = 0.7):
 
     if not segments:
         return []
+
+    logger.info("Grouping %d word segments into utterances", len(segments))
 
     norm_segments = []
     fallback_dur = 0.1
@@ -85,8 +87,68 @@ def _group_utterances(segments, max_gap: float = 0.7):
                 "start": start,
                 "end": end,
                 "text": seg.get("text", seg.get("word", "")),
+                "segment": seg.get("segment"),
             }
         )
+
+    use_segment_ids = False
+    if segments_info is not None:
+        use_segment_ids = True
+    elif all(seg.get("segment") is not None for seg in norm_segments):
+        use_segment_ids = True
+
+    # If we have segment ids we simply merge by those first
+    if use_segment_ids:
+        ordered_groups = []
+        if segments_info is not None:
+            for idx, _info in enumerate(segments_info):
+                words_for_seg = [w for w in norm_segments if w.get("segment") == idx]
+                if words_for_seg:
+                    ordered_groups.append(words_for_seg)
+        else:
+            current_id = norm_segments[0].get("segment")
+            buf = []
+            for w in norm_segments:
+                if w.get("segment") != current_id:
+                    if buf:
+                        ordered_groups.append(buf)
+                    buf = [w]
+                    current_id = w.get("segment")
+                else:
+                    buf.append(w)
+            if buf:
+                ordered_groups.append(buf)
+
+        grouped = []
+        for group in ordered_groups:
+            speaker_counts = {}
+            for w in group:
+                sp = w["speaker"]
+                speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
+            majority_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
+            grouped.append(
+                {
+                    "speaker": majority_speaker,
+                    "start": group[0]["start"],
+                    "end": group[-1]["end"],
+                    "text": " ".join(w["text"] for w in group),
+                }
+            )
+
+        for i in range(len(grouped) - 1):
+            grouped[i]["end"] = grouped[i + 1]["start"]
+
+        logger.info("Created %d utterances based on segment ids", len(grouped))
+        for idx, utt in enumerate(grouped, 1):
+            logger.debug(
+                "Utterance %d: speaker=%s start=%.2f end=%.2f text=%s",
+                idx,
+                utt.get("speaker"),
+                utt.get("start"),
+                utt.get("end"),
+                utt.get("text"),
+            )
+        return grouped
 
     # WhisperX already returns the word segments in chronological order.
     # Sorting here can lead to problems when some words have missing or
@@ -142,6 +204,16 @@ def _group_utterances(segments, max_gap: float = 0.7):
     for i in range(len(grouped) - 1):
         grouped[i]["end"] = grouped[i + 1]["start"]
 
+    logger.info("Created %d utterances", len(grouped))
+    for idx, utt in enumerate(grouped, 1):
+        logger.debug(
+            "Utterance %d: speaker=%s start=%.2f end=%.2f text=%s",
+            idx,
+            utt.get("speaker"),
+            utt.get("start"),
+            utt.get("end"),
+            utt.get("text"),
+        )
     return grouped
 
 
@@ -161,9 +233,10 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    """ Changed to int8, to see if it works on collab"""
+    logger.info("Starting WhisperX transcription using model '%s'", model_size)
     model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
     result = model.transcribe(audio_path)
+    logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
     align_model, metadata = whisperx.load_align_model(
         language_code="de", device=device
@@ -171,19 +244,40 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     aligned_output = whisperx.align(
         result["segments"], align_model, metadata, audio_path, device=device
     )
+    logger.info(
+        "Alignment complete, %d word segments", len(aligned_output.get("word_segments", []))
+    )
     word_segments = aligned_output["word_segments"]
     logger.debug(type(word_segments))
     logger.debug(word_segments[:2])  # Now it's safe to preview
 
+    aligned_segments = aligned_output.get("segments", [])
+
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
     diarize_segments = diarize_model(audio_path)
+    logger.info("Diarization complete with %d segments", len(diarize_segments))
 
     result_with_speakers = whisperx.assign_word_speakers(
         diarize_segments, aligned_output
     )
 
+    logger.info(
+        "Assigned speaker labels to %d words", len(result_with_speakers.get("word_segments", []))
+    )
+
     words = result_with_speakers["word_segments"]
+
+    # attach segment index to each word
+    seg_idx = 0
+    if aligned_segments:
+        seg_starts = [float(s.get("start", s.get("start_time", 0))) for s in aligned_segments]
+        seg_starts.append(float("inf"))
+        for w in words:
+            start_val = float(w.get("start", w.get("start_time", 0)))
+            while seg_idx + 1 < len(seg_starts) and start_val >= seg_starts[seg_idx + 1]:
+                seg_idx += 1
+            w["segment"] = seg_idx
 
     # Build a formatted string while keeping the raw segment information so it
     # can be persisted elsewhere.
@@ -210,7 +304,8 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
         lines.append(f"[{current_speaker}] {current_line.strip()}")
 
     text = "\n".join(lines)
-    return {"text": text, "segments": words}
+    logger.info("Diarization produced %d words", len(words))
+    return {"text": text, "segments": words, "segments_info": aligned_segments}
 
 
 @tool
@@ -228,6 +323,7 @@ class TranscriptionOnlyWorkflow(Runnable):
     """Workflow zur reinen Transkription von Audio mit Whisper."""
 
     def invoke(self, audio_path: str) -> str:
+        logger.info("Transcribing %s", audio_path)
         text = transcribe_audio_whisper.invoke(audio_path)
         logger.info("\ud83d\udcc4 Transkribierter Text:\n%s", text)
         return text
@@ -248,6 +344,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         clip_dir: str = "clips",
         model_size: str = "medium",
     ) -> str:
+        logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(audio_path, model_size=model_size)
         if isinstance(result, dict):
             text = result.get("text", "")
@@ -259,13 +356,19 @@ class WhisperXDiarizationWorkflow(Runnable):
         logger.info("\ud83d\udcc4 Transkription mit Sprecherlabels:\n%s", text)
 
         if segments:
-            # Log the first segment for easier debugging
             logger.debug("First diarized segment: %s", segments[0])
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
-            utterances = _group_utterances(segments)
-            for utt in utterances:
+            logger.info("Grouping diarized words into utterances")
+            utterances = _group_utterances(
+                segments, segments_info=result.get("segments_info")
+            )
+            logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
+            for idx, utt in enumerate(utterances, 1):
+                logger.info(
+                    "Saving utterance %d/%d speaker=%s", idx, len(utterances), utt.get("speaker")
+                )
                 utt["audio_path"] = audio_path
                 saver.invoke(utt)
 
