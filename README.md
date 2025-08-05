@@ -47,6 +47,12 @@ store each speaker **utterance** in a local ChromaDB instance via
 `SegmentSaver` by providing a database path and output directory for the
 audio clips.
 
+When grouping words into utterances you can enable sentence-level grouping by
+merging consecutive utterances from the same speaker. The helper function
+`_group_utterances` now accepts `merge_sentences=True` to perform this merge and
+the diarization workflow uses this option by default so each saved clip contains
+full sentences per speaker.
+
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize \
     --db-path mydb --clip-dir clips

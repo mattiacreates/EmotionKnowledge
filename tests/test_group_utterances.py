@@ -109,3 +109,15 @@ def test_same_segment_id_overrides_gap():
     assert len(result) == 1
     assert result[0]["text"] == "Hallo Welt"
 
+
+def test_merge_sentences_combines_same_speaker():
+    segments = [
+        {"speaker": "s1", "start": 0.0, "end": 1.0, "word": "Hallo"},
+        {"speaker": "s1", "start": 3.0, "end": 4.0, "word": "Welt"},
+    ]
+    result = _group_utterances(segments, merge_sentences=True)
+    assert len(result) == 1
+    assert result[0]["start"] == pytest.approx(0.0)
+    assert result[0]["end"] == pytest.approx(4.0)
+    assert result[0]["text"] == "Hallo Welt"
+
