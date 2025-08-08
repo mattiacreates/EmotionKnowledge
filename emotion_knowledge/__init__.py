@@ -55,6 +55,7 @@ def _group_utterances(
     max_gap: float = 0.7,
     segments_info=None,
     merge_sentences: bool = False,
+    keep_interjections: bool = True,
 ):
     """Merge word-level segments into full utterances.
 
@@ -68,6 +69,9 @@ def _group_utterances(
     merge_sentences : bool, optional
         When ``True`` merge consecutive utterances from the same speaker into a
         single entry. This is useful for sentence-level grouping.
+    keep_interjections : bool, optional
+        When ``True`` (default) every speaker change yields a new utterance so
+        short interjections from another speaker are preserved verbatim.
     """
 
     if not segments:
@@ -76,7 +80,7 @@ def _group_utterances(
     logger.info("Grouping %d word segments into utterances", len(segments))
 
     norm_segments = []
-    fallback_dur = 0.1
+    fallback_dur = 0.25
     for i, seg in enumerate(segments):
         start = float(seg.get("start", seg.get("start_time", 0)))
         end_val = seg.get("end")
@@ -105,7 +109,8 @@ def _group_utterances(
     elif all(seg.get("segment") is not None for seg in norm_segments):
         use_segment_ids = True
 
-    # If we have segment ids we simply merge by those first
+    # If we have segment ids we first group by segment, then split by speaker
+    # changes or large gaps to avoid collapsing interjections.
     if use_segment_ids:
         ordered_groups = []
         if segments_info is not None:
@@ -128,20 +133,37 @@ def _group_utterances(
                 ordered_groups.append(buf)
 
         grouped = []
-        for group in ordered_groups:
-            speaker_counts = {}
-            for w in group:
-                sp = w["speaker"]
-                speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
-            majority_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
-            grouped.append(
-                {
-                    "speaker": majority_speaker,
-                    "start": group[0]["start"],
-                    "end": group[-1]["end"],
-                    "text": " ".join(w["text"] for w in group),
-                }
-            )
+        for seg_words in ordered_groups:
+            subgroups = []
+            cur = [seg_words[0]]
+            for w in seg_words[1:]:
+                gap = w["start"] - cur[-1]["end"]
+                if w["speaker"] != cur[-1]["speaker"] or gap > max_gap:
+                    subgroups.append(cur)
+                    cur = [w]
+                else:
+                    cur.append(w)
+            subgroups.append(cur)
+
+            for g in subgroups:
+                speakers = {w["speaker"] for w in g}
+                if len(speakers) == 1:
+                    sp = g[0]["speaker"]
+                else:
+                    durs = {}
+                    for w in g:
+                        durs[w["speaker"]] = durs.get(w["speaker"], 0.0) + max(
+                            0.0, float(w["end"]) - float(w["start"])
+                        )
+                    sp = max(durs.items(), key=lambda x: x[1])[0]
+                grouped.append(
+                    {
+                        "speaker": sp,
+                        "start": g[0]["start"],
+                        "end": g[-1]["end"],
+                        "text": " ".join(w["text"] for w in g),
+                    }
+                )
 
         if merge_sentences and grouped:
             merged = [grouped[0].copy()]
@@ -154,7 +176,7 @@ def _group_utterances(
             grouped = merged
 
         for i in range(len(grouped) - 1):
-            grouped[i]["end"] = grouped[i + 1]["start"]
+            grouped[i]["end"] = max(grouped[i]["end"], grouped[i + 1]["start"])
 
         logger.info("Created %d utterances based on segment ids", len(grouped))
         for idx, utt in enumerate(grouped, 1):
@@ -178,7 +200,7 @@ def _group_utterances(
     current = norm_segments[0].copy()
 
     # interjections shorter than this duration or consisting of a single word
-    # will be merged back into the surrounding utterance
+    # may optionally be merged back into the surrounding utterance
     interjection_dur = 1.0
     i = 1
     while i < len(norm_segments):
@@ -192,12 +214,11 @@ def _group_utterances(
             i += 1
             continue
 
-        # short interjection from another speaker followed by the original speaker
-        if (
+        if not keep_interjections and (
             seg["speaker"] != current["speaker"]
             and (
                 seg["end"] - seg["start"] <= interjection_dur
-                or " " not in seg["text"].strip()
+                or len(seg["text"].strip().split()) <= 1
             )
             and i + 1 < len(norm_segments)
             and norm_segments[i + 1]["speaker"] == current["speaker"]
@@ -209,6 +230,14 @@ def _group_utterances(
             current["end"] = next_seg["end"]
             i += 2
             continue
+
+        if keep_interjections and seg["speaker"] != current["speaker"]:
+            logger.debug(
+                "Speaker change from %s to %s at %.2f",
+                current["speaker"],
+                seg["speaker"],
+                seg["start"],
+            )
 
         grouped.append(current)
         current = seg.copy()
@@ -229,7 +258,7 @@ def _group_utterances(
     # fully contains the spoken words even if WhisperX produced short end
     # timestamps.  The final utterance keeps its original end time.
     for i in range(len(grouped) - 1):
-        grouped[i]["end"] = grouped[i + 1]["start"]
+        grouped[i]["end"] = max(grouped[i]["end"], grouped[i + 1]["start"])
 
     logger.info("Created %d utterances", len(grouped))
     for idx, utt in enumerate(grouped, 1):
@@ -370,6 +399,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         db_path: str = "segment_db",
         clip_dir: str = "clips",
         model_size: str = "medium",
+        keep_interjections: bool = True,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
@@ -394,6 +424,7 @@ class WhisperXDiarizationWorkflow(Runnable):
                 segments,
                 segments_info=result.get("segments_info"),
                 merge_sentences=True,
+                keep_interjections=keep_interjections,
             )
             logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
             for idx, utt in enumerate(utterances, 1):
@@ -431,6 +462,12 @@ def main():
         default="medium",
         help="WhisperX model size to use (base, small, medium, large)",
     )
+    parser.add_argument(
+        "--keep-interruptions",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Preserve short interruptions as separate utterances (default on)",
+    )
     args = parser.parse_args()
 
     if args.diarize:
@@ -440,6 +477,7 @@ def main():
             db_path=args.db_path,
             clip_dir=args.clip_dir,
             model_size=args.whisperx_model,
+            keep_interjections=args.keep_interruptions,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
