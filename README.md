@@ -59,7 +59,14 @@ python -m emotion_knowledge path/to/audio.wav --diarize \
 ```
 
 Use `--whisperx-model` to choose the WhisperX model size when diarization is
-enabled. The default is `medium`.
+enabled. The default is `medium`, but you can also select `base`, `small`, or
+`large` depending on your resource constraints.
+
+For example, the following command uses the smaller `base` model:
+
+```bash
+python -m emotion_knowledge path/to/audio.wav --diarize --whisperx-model base
+```
 
 The script prints the resulting transcription to the console.
 
