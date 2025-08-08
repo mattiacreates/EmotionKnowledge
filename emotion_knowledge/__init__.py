@@ -50,7 +50,12 @@ except Exception:  # pragma: no cover - optional dependency
     TextEmotionAnnotator = None
 
 
-def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
+def _group_utterances(
+    segments,
+    max_gap: float = 0.7,
+    segments_info=None,
+    merge_sentences: bool = False,
+):
     """Merge word-level segments into full utterances.
 
     Parameters
@@ -60,6 +65,9 @@ def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
     max_gap : float
         Maximum allowed pause between words (in seconds) for them to be
         merged into the same utterance.
+    merge_sentences : bool, optional
+        When ``True`` merge consecutive utterances from the same speaker into a
+        single entry. This is useful for sentence-level grouping.
     """
 
     if not segments:
@@ -135,6 +143,16 @@ def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
                 }
             )
 
+        if merge_sentences and grouped:
+            merged = [grouped[0].copy()]
+            for utt in grouped[1:]:
+                if utt["speaker"] == merged[-1]["speaker"]:
+                    merged[-1]["text"] += " " + utt["text"]
+                    merged[-1]["end"] = utt["end"]
+                else:
+                    merged.append(utt.copy())
+            grouped = merged
+
         for i in range(len(grouped) - 1):
             grouped[i]["end"] = grouped[i + 1]["start"]
 
@@ -197,6 +215,15 @@ def _group_utterances(segments, max_gap: float = 0.7, segments_info=None):
         i += 1
 
     grouped.append(current)
+    if merge_sentences and grouped:
+        merged = [grouped[0].copy()]
+        for utt in grouped[1:]:
+            if utt["speaker"] == merged[-1]["speaker"]:
+                merged[-1]["text"] += " " + utt["text"]
+                merged[-1]["end"] = utt["end"]
+            else:
+                merged.append(utt.copy())
+        grouped = merged
 
     # extend each utterance to start of the following one so the audio clip
     # fully contains the spoken words even if WhisperX produced short end
@@ -345,7 +372,9 @@ class WhisperXDiarizationWorkflow(Runnable):
         model_size: str = "medium",
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
-        result = transcribe_diarize_whisperx.invoke(audio_path, model_size=model_size)
+        result = transcribe_diarize_whisperx.invoke(
+            {"audio_path": audio_path, "model_size": model_size}
+        )
         if isinstance(result, dict):
             text = result.get("text", "")
             segments = result.get("segments", [])
@@ -362,7 +391,9 @@ class WhisperXDiarizationWorkflow(Runnable):
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
             logger.info("Grouping diarized words into utterances")
             utterances = _group_utterances(
-                segments, segments_info=result.get("segments_info")
+                segments,
+                segments_info=result.get("segments_info"),
+                merge_sentences=True,
             )
             logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
             for idx, utt in enumerate(utterances, 1):
