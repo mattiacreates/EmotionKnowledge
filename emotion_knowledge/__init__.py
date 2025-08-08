@@ -274,11 +274,22 @@ def _group_utterances(
 
 
 @tool
-def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
+def transcribe_diarize_whisperx(
+    audio_path: str,
+    model_size: str = "medium",
+    language: str = "de",
+    compute_type: str = "int8",
+    beam_size: int = 5,
+    temperature: float = 0.0,
+    min_speakers: int | None = None,
+    max_speakers: int | None = None,
+    return_embeddings: bool = False,
+):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
 
     ``model_size`` controls which WhisperX model checkpoint is loaded
-    (e.g. ``base``, ``small``, ``medium``, ``large``).
+    (e.g. ``base``, ``small``, ``medium``, ``large``).  Additional parameters
+    allow configuring language, compute precision and decoding behaviour.
 
     Returns a dict with ``text`` and ``segments`` keys so downstream code can
     further process the diarized segments.
@@ -290,12 +301,19 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     logger.info("Starting WhisperX transcription using model '%s'", model_size)
-    model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
-    result = model.transcribe(audio_path)
+    model = whisperx.load_model(
+        model_size,
+        device=device,
+        language=language,
+        compute_type=compute_type,
+    )
+    result = model.transcribe(
+        audio_path, beam_size=beam_size, temperature=temperature
+    )
     logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
     align_model, metadata = whisperx.load_align_model(
-        language_code="de", device=device
+        language_code=language, device=device
     )
     aligned_output = whisperx.align(
         result["segments"], align_model, metadata, audio_path, device=device
@@ -311,7 +329,12 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
     diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
-    diarize_segments = diarize_model(audio_path)
+    diarize_segments = diarize_model(
+        audio_path,
+        min_speakers=min_speakers,
+        max_speakers=max_speakers,
+        return_embeddings=return_embeddings,
+    )
     logger.info("Diarization complete with %d segments", len(diarize_segments))
 
     result_with_speakers = whisperx.assign_word_speakers(
@@ -400,10 +423,27 @@ class WhisperXDiarizationWorkflow(Runnable):
         clip_dir: str = "clips",
         model_size: str = "medium",
         keep_interjections: bool = True,
+        language: str = "de",
+        compute_type: str = "int8",
+        beam_size: int = 5,
+        temperature: float = 0.0,
+        min_speakers: int | None = None,
+        max_speakers: int | None = None,
+        return_embeddings: bool = False,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
-            {"audio_path": audio_path, "model_size": model_size}
+            {
+                "audio_path": audio_path,
+                "model_size": model_size,
+                "language": language,
+                "compute_type": compute_type,
+                "beam_size": beam_size,
+                "temperature": temperature,
+                "min_speakers": min_speakers,
+                "max_speakers": max_speakers,
+                "return_embeddings": return_embeddings,
+            }
         )
         if isinstance(result, dict):
             text = result.get("text", "")
@@ -468,6 +508,46 @@ def main():
         default=True,
         help="Preserve short interruptions as separate utterances (default on)",
     )
+    parser.add_argument(
+        "--language",
+        default="de",
+        help="Language code for WhisperX model",
+    )
+    parser.add_argument(
+        "--compute-type",
+        default="int8",
+        help="Precision for WhisperX model (e.g. float16, int8)",
+    )
+    parser.add_argument(
+        "--beam-size",
+        type=int,
+        default=5,
+        help="Beam search width",
+    )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=0.0,
+        help="Decoding temperature",
+    )
+    parser.add_argument(
+        "--min-speakers",
+        type=int,
+        default=None,
+        help="Minimum number of speakers for diarization",
+    )
+    parser.add_argument(
+        "--max-speakers",
+        type=int,
+        default=None,
+        help="Maximum number of speakers for diarization",
+    )
+    parser.add_argument(
+        "--return-embeddings",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Return speaker embeddings from diarization pipeline",
+    )
     args = parser.parse_args()
 
     if args.diarize:
@@ -478,6 +558,13 @@ def main():
             clip_dir=args.clip_dir,
             model_size=args.whisperx_model,
             keep_interjections=args.keep_interruptions,
+            language=args.language,
+            compute_type=args.compute_type,
+            beam_size=args.beam_size,
+            temperature=args.temperature,
+            min_speakers=args.min_speakers,
+            max_speakers=args.max_speakers,
+            return_embeddings=args.return_embeddings,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
