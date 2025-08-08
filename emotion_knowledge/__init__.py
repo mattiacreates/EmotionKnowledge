@@ -372,7 +372,9 @@ class WhisperXDiarizationWorkflow(Runnable):
         model_size: str = "medium",
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
-        result = transcribe_diarize_whisperx(audio_path, model_size=model_size)
+        result = transcribe_diarize_whisperx.invoke(
+            {"audio_path": audio_path, "model_size": model_size}
+        )
         if isinstance(result, dict):
             text = result.get("text", "")
             segments = result.get("segments", [])
