@@ -53,6 +53,10 @@ merging consecutive utterances from the same speaker. The helper function
 the diarization workflow uses this option by default so each saved clip contains
 full sentences per speaker.
 
+By default real interruptions from another speaker are preserved as their own
+utterances. You can disable this healing with ``--no-keep-interruptions`` on the
+CLI, which will merge short interjections back into the surrounding speech.
+
 ```bash
 python -m emotion_knowledge path/to/audio.wav --diarize \
     --db-path mydb --clip-dir clips

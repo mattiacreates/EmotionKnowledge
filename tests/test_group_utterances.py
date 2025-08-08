@@ -56,58 +56,55 @@ def test_end_time_extended_to_next_start():
     assert result[0]["end"] == pytest.approx(result[1]["start"])
 
 
-def test_short_interjection_is_merged():
+def test_interjection_preserved():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "hm"},
+        {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "uh"},
         {"speaker": "s1", "start": 0.6, "end": 1.0, "word": "Welt"},
     ]
     result = _group_utterances(segments)
-    assert len(result) == 1
-    assert result[0]["start"] == pytest.approx(0.0)
-    assert result[0]["end"] == pytest.approx(1.0)
-    assert result[0]["text"] == "Hallo hm Welt"
+    assert [utt["text"] for utt in result] == ["Hallo", "uh", "Welt"]
 
 
-def test_long_single_word_interjection_is_merged():
+def test_interjection_merged_when_disabled():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {"speaker": "s2", "start": 0.5, "end": 1.4, "word": "hm"},
-        {"speaker": "s1", "start": 1.4, "end": 2.0, "word": "Welt"},
+        {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "uh"},
+        {"speaker": "s1", "start": 0.6, "end": 1.0, "word": "Welt"},
     ]
-    result = _group_utterances(segments)
+    result = _group_utterances(segments, keep_interjections=False)
     assert len(result) == 1
-    assert result[0]["start"] == pytest.approx(0.0)
-    assert result[0]["end"] == pytest.approx(2.0)
-    assert result[0]["text"] == "Hallo hm Welt"
+    assert result[0]["text"] == "Hallo uh Welt"
 
 
-def test_multi_word_interjection_over_one_second_not_merged():
+def test_segment_id_splits_on_speaker_change():
     segments = [
-        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {
-            "speaker": "s2",
-            "start": 0.5,
-            "end": 1.7,
-            "text": "ach so",
-        },
-        {"speaker": "s1", "start": 1.7, "end": 2.2, "word": "Welt"},
+        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo", "segment": 0},
+        {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "uh", "segment": 0},
+        {"speaker": "s1", "start": 0.6, "end": 1.0, "word": "Welt", "segment": 0},
     ]
     result = _group_utterances(segments)
-    assert len(result) == 3
-    assert result[0]["text"] == "Hallo"
-    assert result[1]["text"] == "ach so"
-    assert result[2]["text"] == "Welt"
+    assert [utt["text"] for utt in result] == ["Hallo", "uh", "Welt"]
 
 
-def test_same_segment_id_overrides_gap():
+def test_end_time_not_truncated_with_overlap():
+    segments = [
+        {"speaker": "s1", "start": 0.0, "end": 1.5, "word": "Hallo"},
+        {"speaker": "s2", "start": 1.0, "end": 2.0, "word": "Welt"},
+    ]
+    result = _group_utterances(segments)
+    assert len(result) == 2
+    assert result[0]["end"] == pytest.approx(1.5)
+
+
+def test_same_segment_split_when_gap_large():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo", "segment": 0},
         {"speaker": "s1", "start": 2.0, "end": 2.5, "word": "Welt", "segment": 0},
     ]
     result = _group_utterances(segments, max_gap=0.1)
-    assert len(result) == 1
-    assert result[0]["text"] == "Hallo Welt"
+    assert len(result) == 2
+    assert [utt["text"] for utt in result] == ["Hallo", "Welt"]
 
 
 def test_merge_sentences_combines_same_speaker():
