@@ -423,6 +423,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         clip_dir: str = "clips",
         model_size: str = "medium",
         keep_interjections: bool = True,
+        max_gap: float = 0.7,
         language: str = "de",
         compute_type: str = "int8",
         beam_size: int = 5,
@@ -462,6 +463,7 @@ class WhisperXDiarizationWorkflow(Runnable):
             logger.info("Grouping diarized words into utterances")
             utterances = _group_utterances(
                 segments,
+                max_gap=max_gap,
                 segments_info=result.get("segments_info"),
                 merge_sentences=True,
                 keep_interjections=keep_interjections,
@@ -507,6 +509,12 @@ def main():
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Preserve short interruptions as separate utterances (default on)",
+    )
+    parser.add_argument(
+        "--max-gap",
+        type=float,
+        default=0.7,
+        help="Maximum allowed pause between words for same utterance",
     )
     parser.add_argument(
         "--language",
@@ -558,6 +566,7 @@ def main():
             clip_dir=args.clip_dir,
             model_size=args.whisperx_model,
             keep_interjections=args.keep_interruptions,
+            max_gap=args.max_gap,
             language=args.language,
             compute_type=args.compute_type,
             beam_size=args.beam_size,
