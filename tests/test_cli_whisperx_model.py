@@ -11,13 +11,17 @@ def test_cli_whisperx_model_base(monkeypatch, tmp_path, caplog):
     audio_file = tmp_path / "audio.wav"
     audio_file.write_bytes(b"")
 
-    def fake_transcribe(audio_path: str, model_size: str = "medium"):
-        emotion_knowledge.logger.info(
-            "Starting WhisperX transcription using model '%s'", model_size
-        )
-        return {"text": "", "segments": []}
+    class FakeTranscribe:
+        def invoke(self, params):
+            model_size = params.get("model_size", "medium")
+            emotion_knowledge.logger.info(
+                "Starting WhisperX transcription using model '%s'", model_size
+            )
+            return {"text": "", "segments": []}
 
-    monkeypatch.setattr(emotion_knowledge, "transcribe_diarize_whisperx", fake_transcribe)
+    monkeypatch.setattr(
+        emotion_knowledge, "transcribe_diarize_whisperx", FakeTranscribe()
+    )
     monkeypatch.setattr(
         sys,
         "argv",
