@@ -1,6 +1,7 @@
 import argparse
 import os
 import logging
+from functools import lru_cache
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -15,11 +16,6 @@ except Exception:  # pragma: no cover - optional dependency
 
     def tool(func):  # pragma: no cover - noop decorator
         return func
-
-try:  # whisper is only needed for the CLI workflow, not for tests
-    import whisper  # type: ignore
-except Exception:  # pragma: no cover - allow tests without whisper installed
-    whisper = None
 
 # Import SegmentSaver lazily to avoid requiring optional deps during tests
 try:
@@ -465,14 +461,26 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     return {"text": text, "segments": words, "segments_info": aligned_segments}
 
 
+@lru_cache(maxsize=1)
+def _load_hf_whisper():
+    """Load the Hugging Face Whisper pipeline lazily and cache it."""
+    from transformers import pipeline
+
+    model_id = "openai/whisper-large-v3"
+    return pipeline("automatic-speech-recognition", model=model_id)
+
+
 @tool
 def transcribe_audio_whisper(audio_path: str) -> str:
-    """Transkribiert deutsche Sprache aus einer Audiodatei mit Whisper."""
+    """Transkribiert deutsche Sprache aus einer Audiodatei mit Whisper.
+
+    Uses the open-source ``openai/whisper-large-v3`` model hosted on
+    Hugging Face.
+    """
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
-    """ Larger Model performed better """
-    """model = whisper.load_model("large-v3")"""
-    model = whisper.load_model("base")
-    result = model.transcribe(audio_path, language=None, temperature=0.3)
+
+    pipe = _load_hf_whisper()
+    result = pipe(audio_path, generate_kwargs={"temperature": 0.3})
     return result["text"].strip()
 
 

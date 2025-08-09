@@ -97,7 +97,7 @@ clones the repository and transcribes an audio file:
 %pip install -r EmotionKnowledge/requirements.txt
 
 # optional: extra models used by the annotators
-%pip install langchain transformers openai-whisper
+%pip install langchain transformers
 
 %cd EmotionKnowledge
 !python -m emotion_knowledge /path/to/audio.wav --diarize \
