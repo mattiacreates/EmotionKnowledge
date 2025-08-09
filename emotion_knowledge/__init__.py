@@ -382,10 +382,26 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
 
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
     device = "cuda" if torch.cuda.is_available() else "cpu"
+    compute_type = "float16" if device == "cuda" else "int8"
+    logger.info("Using compute_type '%s' on device '%s'", compute_type, device)
 
     logger.info("Starting WhisperX transcription using model '%s'", model_size)
-    model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
-    result = model.transcribe(audio_path)
+    model = whisperx.load_model(
+        model_size, device=device, language="de", compute_type=compute_type
+    )
+    transcribe_kwargs = {
+        "vad_filter": False,
+        "condition_on_previous_text": False,
+        "no_speech_threshold": None,
+        "log_prob_threshold": None,
+        "compression_ratio_threshold": None,
+    }
+    logger.info("Transcribing with vad_filter=%s", transcribe_kwargs["vad_filter"])
+    try:
+        result = model.transcribe(audio_path, **transcribe_kwargs)
+    except TypeError as e:  # pragma: no cover - depends on whisperx version
+        logger.warning("Falling back to minimal transcribe call: %s", e)
+        result = model.transcribe(audio_path, vad_filter=False)
     logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
     align_model, metadata = whisperx.load_align_model(
