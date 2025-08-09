@@ -85,8 +85,9 @@ def _group_utterances(
     tag_backchannels : bool, optional
         When ``True`` add ``is_backchannel=True`` to detected backchannels.
     preserve_end_times : bool, optional
-        When ``True`` keep original end timestamps. When ``False`` extend each
-        utterance to the start of the following one.
+        Deprecated. End timestamps are always taken from the final word in each
+        utterance. This parameter is retained for backwards compatibility and
+        has no effect.
     """
 
     if not segments:
@@ -162,10 +163,12 @@ def _group_utterances(
                 sp = w["speaker"]
                 speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
             majority_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
+            first_word = group[0]
+            last_word = group[-1]
             utt = {
                 "speaker": majority_speaker,
-                "start": group[0]["start"],
-                "end": group[-1]["end"],
+                "start": first_word["start"],
+                "end": last_word["end"],
                 "text": " ".join(w["text"] for w in group),
             }
             _tag_backchannel(utt)
@@ -184,10 +187,6 @@ def _group_utterances(
                 else:
                     merged.append(utt.copy())
             grouped = merged
-
-        if not preserve_end_times:
-            for i in range(len(grouped) - 1):
-                grouped[i]["end"] = grouped[i + 1]["start"]
 
         logger.info("Created %d utterances based on segment ids", len(grouped))
         for idx, utt in enumerate(grouped, 1):
@@ -288,13 +287,6 @@ def _group_utterances(
             else:
                 merged.append(utt.copy())
         grouped = merged
-
-    if not preserve_end_times:
-        # extend each utterance to start of the following one so the audio clip
-        # fully contains the spoken words even if WhisperX produced short end
-        # timestamps.  The final utterance keeps its original end time.
-        for i in range(len(grouped) - 1):
-            grouped[i]["end"] = grouped[i + 1]["start"]
 
     logger.info("Created %d utterances", len(grouped))
     for idx, utt in enumerate(grouped, 1):

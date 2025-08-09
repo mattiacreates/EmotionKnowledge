@@ -56,14 +56,15 @@ def test_end_time_preserved_by_default():
     assert result[0]["end"] == pytest.approx(1.0)
 
 
-def test_end_time_extended_when_disabled():
+def test_end_time_not_modified_when_disabled():
     segments = [
         {"speaker": "speaker_01", "start": 0.0, "end": 1.0, "word": "Hallo"},
         {"speaker": "speaker_01", "start": 5.0, "end": 5.5, "word": "Welt"},
     ]
     result = _group_utterances(segments, preserve_end_times=False)
     assert len(result) == 2
-    assert result[0]["end"] == pytest.approx(result[1]["start"])
+    # end timestamps come from the final word regardless of preserve_end_times
+    assert result[0]["end"] == pytest.approx(1.0)
 
 
 def test_short_interjection_becomes_backchannel():
