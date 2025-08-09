@@ -364,9 +364,7 @@ def export_word_level_excel(
 
 
 @tool
-def transcribe_diarize_whisperx(
-    audio_path: str, model_size: str = "medium", temperature: float = 0.3
-):
+def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
 
     ``model_size`` controls which WhisperX model checkpoint is loaded
@@ -390,7 +388,7 @@ def transcribe_diarize_whisperx(
     model = whisperx.load_model(
         model_size, device=device, language="de", compute_type=compute_type
     )
-    result = model.transcribe(audio_path, temperature=temperature)
+    result = model.transcribe(audio_path)
     logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
     align_model, metadata = whisperx.load_align_model(
@@ -473,7 +471,7 @@ def _load_hf_whisper():
 
 
 @tool
-def transcribe_audio_whisper(audio_path: str, temperature: float = 0.3) -> str:
+def transcribe_audio_whisper(audio_path: str) -> str:
     """Transkribiert deutsche Sprache aus einer Audiodatei mit Whisper.
 
     Uses the open-source ``openai/whisper-large-v3`` model hosted on
@@ -482,18 +480,16 @@ def transcribe_audio_whisper(audio_path: str, temperature: float = 0.3) -> str:
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
 
     pipe = _load_hf_whisper()
-    result = pipe(audio_path, generate_kwargs={"temperature": temperature})
+    result = pipe(audio_path, generate_kwargs={"temperature": 0.3})
     return result["text"].strip()
 
 
 class TranscriptionOnlyWorkflow(Runnable):
     """Workflow zur reinen Transkription von Audio mit Whisper."""
 
-    def invoke(self, audio_path: str, temperature: float = 0.3) -> str:
+    def invoke(self, audio_path: str) -> str:
         logger.info("Transcribing %s", audio_path)
-        text = transcribe_audio_whisper.invoke(
-            {"audio_path": audio_path, "temperature": temperature}
-        )
+        text = transcribe_audio_whisper.invoke(audio_path)
         logger.info("\ud83d\udcc4 Transkribierter Text:\n%s", text)
         return text
 
@@ -515,15 +511,10 @@ class WhisperXDiarizationWorkflow(Runnable):
         preserve_backchannels: bool = True,
         preserve_end_times: bool = True,
         export_words_xlsx: bool = False,
-        temperature: float = 0.3,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
-            {
-                "audio_path": audio_path,
-                "model_size": model_size,
-                "temperature": temperature,
-            }
+            {"audio_path": audio_path, "model_size": model_size}
         )
         if isinstance(result, dict):
             text = result.get("text", "")
@@ -588,12 +579,6 @@ def main():
         default="medium",
         help="WhisperX model size to use (base, small, medium, large)",
     )
-    parser.add_argument(
-        "--temperature",
-        type=float,
-        default=0.3,
-        help="Sampling temperature for Whisper generation",
-    )
     parser.add_argument("--preserve-backchannels", action="store_true", default=True)
     parser.add_argument(
         "--no-preserve-backchannels", dest="preserve_backchannels", action="store_false"
@@ -616,11 +601,10 @@ def main():
             preserve_backchannels=args.preserve_backchannels,
             preserve_end_times=args.preserve_end_times,
             export_words_xlsx=args.export_words_xlsx,
-            temperature=args.temperature,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
-        _ = workflow.invoke(args.audio, temperature=args.temperature)
+        _ = workflow.invoke(args.audio)
 
 
 if __name__ == "__main__":
