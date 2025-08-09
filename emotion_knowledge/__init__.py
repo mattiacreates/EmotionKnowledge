@@ -55,6 +55,11 @@ def _group_utterances(
     max_gap: float = 0.7,
     segments_info=None,
     merge_sentences: bool = False,
+    absorb_interjections: bool = False,
+    backchannel_max_dur: float = 0.7,
+    backchannel_max_words: int = 3,
+    tag_backchannels: bool = True,
+    preserve_end_times: bool = True,
 ):
     """Merge word-level segments into full utterances.
 
@@ -68,12 +73,35 @@ def _group_utterances(
     merge_sentences : bool, optional
         When ``True`` merge consecutive utterances from the same speaker into a
         single entry. This is useful for sentence-level grouping.
+    absorb_interjections : bool, optional
+        When ``True`` short interjections from other speakers are merged back
+        into the surrounding utterance.  When ``False`` (default) they remain
+        separate utterances.
+    backchannel_max_dur : float, optional
+        Maximum duration (in seconds) for an utterance to qualify as a
+        backchannel.
+    backchannel_max_words : int, optional
+        Maximum number of words for an utterance to qualify as a backchannel.
+    tag_backchannels : bool, optional
+        When ``True`` add ``is_backchannel=True`` to detected backchannels.
+    preserve_end_times : bool, optional
+        When ``True`` keep original end timestamps. When ``False`` extend each
+        utterance to the start of the following one.
     """
 
     if not segments:
         return []
 
     logger.info("Grouping %d word segments into utterances", len(segments))
+
+    def _is_backchannel(seg):
+        dur = seg["end"] - seg["start"]
+        wc = len(seg["text"].strip().split())
+        return dur <= backchannel_max_dur or wc <= backchannel_max_words
+
+    def _tag_backchannel(utt):
+        if tag_backchannels and _is_backchannel(utt):
+            utt["is_backchannel"] = True
 
     norm_segments = []
     fallback_dur = 0.1
@@ -134,27 +162,32 @@ def _group_utterances(
                 sp = w["speaker"]
                 speaker_counts[sp] = speaker_counts.get(sp, 0) + 1
             majority_speaker = max(speaker_counts.items(), key=lambda x: x[1])[0]
-            grouped.append(
-                {
-                    "speaker": majority_speaker,
-                    "start": group[0]["start"],
-                    "end": group[-1]["end"],
-                    "text": " ".join(w["text"] for w in group),
-                }
-            )
+            utt = {
+                "speaker": majority_speaker,
+                "start": group[0]["start"],
+                "end": group[-1]["end"],
+                "text": " ".join(w["text"] for w in group),
+            }
+            _tag_backchannel(utt)
+            grouped.append(utt)
 
         if merge_sentences and grouped:
             merged = [grouped[0].copy()]
             for utt in grouped[1:]:
-                if utt["speaker"] == merged[-1]["speaker"]:
+                if (
+                    utt["speaker"] == merged[-1]["speaker"]
+                    and not merged[-1].get("is_backchannel")
+                    and not utt.get("is_backchannel")
+                ):
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
                 else:
                     merged.append(utt.copy())
             grouped = merged
 
-        for i in range(len(grouped) - 1):
-            grouped[i]["end"] = grouped[i + 1]["start"]
+        if not preserve_end_times:
+            for i in range(len(grouped) - 1):
+                grouped[i]["end"] = grouped[i + 1]["start"]
 
         logger.info("Created %d utterances based on segment ids", len(grouped))
         for idx, utt in enumerate(grouped, 1):
@@ -176,9 +209,25 @@ def _group_utterances(
 
     grouped = []
     current = norm_segments[0].copy()
+    prev_speaker = None
+    suppress_tag = False
+
+    def append_current(utt):
+        nonlocal prev_speaker, suppress_tag
+        if (
+            tag_backchannels
+            and not suppress_tag
+            and prev_speaker is not None
+            and utt["speaker"] != prev_speaker
+            and _is_backchannel(utt)
+        ):
+            utt["is_backchannel"] = True
+        grouped.append(utt)
+        prev_speaker = utt["speaker"]
+        suppress_tag = False
 
     # interjections shorter than this duration or consisting of a single word
-    # will be merged back into the surrounding utterance
+    # are candidates to be absorbed
     interjection_dur = 1.0
     i = 1
     while i < len(norm_segments):
@@ -203,33 +252,49 @@ def _group_utterances(
             and norm_segments[i + 1]["speaker"] == current["speaker"]
             and norm_segments[i + 1]["start"] - current["end"] <= interjection_dur
         ):
-            current["text"] += " " + seg["text"]
-            next_seg = norm_segments[i + 1]
-            current["text"] += " " + next_seg["text"]
-            current["end"] = next_seg["end"]
-            i += 2
-            continue
+            if absorb_interjections:
+                current["text"] += " " + seg["text"]
+                next_seg = norm_segments[i + 1]
+                current["text"] += " " + next_seg["text"]
+                current["end"] = next_seg["end"]
+                i += 2
+                continue
+            else:
+                append_current(current)
+                interj = seg.copy()
+                if tag_backchannels and _is_backchannel(interj):
+                    interj["is_backchannel"] = True
+                append_current(interj)
+                current = norm_segments[i + 1].copy()
+                suppress_tag = True
+                i += 2
+                continue
 
-        grouped.append(current)
+        append_current(current)
         current = seg.copy()
         i += 1
 
-    grouped.append(current)
+    append_current(current)
     if merge_sentences and grouped:
         merged = [grouped[0].copy()]
         for utt in grouped[1:]:
-            if utt["speaker"] == merged[-1]["speaker"]:
+            if (
+                utt["speaker"] == merged[-1]["speaker"]
+                and not merged[-1].get("is_backchannel")
+                and not utt.get("is_backchannel")
+            ):
                 merged[-1]["text"] += " " + utt["text"]
                 merged[-1]["end"] = utt["end"]
             else:
                 merged.append(utt.copy())
         grouped = merged
 
-    # extend each utterance to start of the following one so the audio clip
-    # fully contains the spoken words even if WhisperX produced short end
-    # timestamps.  The final utterance keeps its original end time.
-    for i in range(len(grouped) - 1):
-        grouped[i]["end"] = grouped[i + 1]["start"]
+    if not preserve_end_times:
+        # extend each utterance to start of the following one so the audio clip
+        # fully contains the spoken words even if WhisperX produced short end
+        # timestamps.  The final utterance keeps its original end time.
+        for i in range(len(grouped) - 1):
+            grouped[i]["end"] = grouped[i + 1]["start"]
 
     logger.info("Created %d utterances", len(grouped))
     for idx, utt in enumerate(grouped, 1):
@@ -370,6 +435,8 @@ class WhisperXDiarizationWorkflow(Runnable):
         db_path: str = "segment_db",
         clip_dir: str = "clips",
         model_size: str = "medium",
+        preserve_backchannels: bool = True,
+        preserve_end_times: bool = True,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
@@ -394,6 +461,11 @@ class WhisperXDiarizationWorkflow(Runnable):
                 segments,
                 segments_info=result.get("segments_info"),
                 merge_sentences=True,
+                absorb_interjections=not preserve_backchannels,
+                tag_backchannels=True,
+                backchannel_max_dur=0.7,
+                backchannel_max_words=3,
+                preserve_end_times=preserve_end_times,
             )
             logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
             for idx, utt in enumerate(utterances, 1):
@@ -431,6 +503,11 @@ def main():
         default="medium",
         help="WhisperX model size to use (base, small, medium, large)",
     )
+    parser.add_argument("--preserve-backchannels", action="store_true", default=True)
+    parser.add_argument(
+        "--no-preserve-backchannels", dest="preserve_backchannels", action="store_false"
+    )
+    parser.add_argument("--preserve-end-times", action="store_true", default=True)
     args = parser.parse_args()
 
     if args.diarize:
@@ -440,6 +517,8 @@ def main():
             db_path=args.db_path,
             clip_dir=args.clip_dir,
             model_size=args.whisperx_model,
+            preserve_backchannels=args.preserve_backchannels,
+            preserve_end_times=args.preserve_end_times,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
