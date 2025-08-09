@@ -296,7 +296,6 @@ def transcribe_diarize_whisperx(
     """
     import torch
     import whisperx
-    import inspect
 
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -308,16 +307,9 @@ def transcribe_diarize_whisperx(
         language=language,
         compute_type=compute_type,
     )
-    transcribe_params = inspect.signature(model.transcribe).parameters
-    kwargs = {
-        name: val
-        for name, val in {
-            "beam_size": beam_size,
-            "temperature": temperature,
-        }.items()
-        if name in transcribe_params
-    }
-    result = model.transcribe(audio_path, **kwargs)
+    result = model.transcribe(
+        audio_path, beam_size=beam_size, temperature=temperature
+    )
     logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
     align_model, metadata = whisperx.load_align_model(
