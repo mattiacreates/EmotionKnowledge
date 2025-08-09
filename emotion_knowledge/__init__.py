@@ -309,6 +309,72 @@ def _group_utterances(
     return grouped
 
 
+def export_word_level_excel(
+    words,
+    path: str = "Single_Word_Transcript.xlsx",
+    backchannel_max_dur: float = 0.7,
+    backchannel_max_words: int = 3,
+):
+    """Export word-level segments to Excel with a CSV fallback.
+
+    Parameters
+    ----------
+    words : list of dict
+        Word-level diarization results.
+    path : str, optional
+        Output path for the Excel file.
+    backchannel_max_dur : float, optional
+        Duration threshold for backchannel detection in seconds.
+    backchannel_max_words : int, optional
+        Word-count threshold for backchannel detection.
+    """
+
+    if not words:
+        return None
+
+    import pandas as pd
+
+    rows = []
+    for idx, w in enumerate(words, 1):
+        start = float(w.get("start", w.get("start_time", 0)) or 0)
+        end_val = w.get("end")
+        if end_val is None or float(end_val) == 0.0:
+            end_val = w.get("end_time")
+        if end_val is None or float(end_val) == 0.0:
+            end_val = start
+        end = float(end_val)
+        duration = max(0.0, end - start)
+        text = w.get("text", w.get("word", ""))
+        word_count = len(str(text).strip().split())
+        is_backchannel = (
+            duration <= backchannel_max_dur or word_count <= backchannel_max_words
+        )
+        rows.append(
+            {
+                "idx": idx,
+                "segment": w.get("segment"),
+                "speaker": w.get("speaker"),
+                "start": start,
+                "end": end,
+                "duration": duration,
+                "text": text,
+                "is_backchannel": is_backchannel,
+            }
+        )
+
+    df = pd.DataFrame(rows)
+    df.sort_values(["start", "idx"], inplace=True)
+    try:
+        df.to_excel(path, index=False)
+        logger.info("Exported word-level transcript to %s", path)
+        return path
+    except ImportError:
+        csv_path = os.path.splitext(path)[0] + ".csv"
+        df.to_csv(csv_path, index=False)
+        logger.info("openpyxl not installed, exported CSV to %s", csv_path)
+        return csv_path
+
+
 @tool
 def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
@@ -437,6 +503,7 @@ class WhisperXDiarizationWorkflow(Runnable):
         model_size: str = "medium",
         preserve_backchannels: bool = True,
         preserve_end_times: bool = True,
+        export_words_xlsx: bool = False,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
@@ -453,6 +520,8 @@ class WhisperXDiarizationWorkflow(Runnable):
 
         if segments:
             logger.debug("First diarized segment: %s", segments[0])
+            if export_words_xlsx:
+                export_word_level_excel(segments, "Single_Word_Transcript.xlsx")
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
@@ -508,6 +577,11 @@ def main():
         "--no-preserve-backchannels", dest="preserve_backchannels", action="store_false"
     )
     parser.add_argument("--preserve-end-times", action="store_true", default=True)
+    parser.add_argument(
+        "--export-words-xlsx",
+        action="store_true",
+        help="Export word-level transcript to Excel (CSV fallback)",
+    )
     args = parser.parse_args()
 
     if args.diarize:
@@ -519,6 +593,7 @@ def main():
             model_size=args.whisperx_model,
             preserve_backchannels=args.preserve_backchannels,
             preserve_end_times=args.preserve_end_times,
+            export_words_xlsx=args.export_words_xlsx,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
