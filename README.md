@@ -42,6 +42,13 @@ Run a transcription:
 python -m emotion_knowledge path/to/audio.wav
 ```
 
+Use the ``--temperature`` flag to control the sampling temperature of the
+Whisper model (default ``0.3``):
+
+```bash
+python -m emotion_knowledge path/to/audio.wav --temperature 0.7
+```
+
 `WhisperXDiarizationWorkflow`.  When diarization is enabled you can also
 store each speaker **utterance** in a local ChromaDB instance via
 `SegmentSaver` by providing a database path and output directory for the
