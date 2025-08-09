@@ -62,6 +62,16 @@ Use `--whisperx-model` to choose the WhisperX model size when diarization is
 enabled. The default is `medium`, but you can also select `base`, `small`, or
 `large` depending on your resource constraints.
 
+To experiment with different speaker diarization backends, provide a Hugging Face
+model ID via `--diarization-model`. The default is
+`pyannote/speaker-diarization-3.1`, but any compatible model can be used. For
+example, to try the `mistralai/Voxtral-Small-24B-2507` model:
+
+```bash
+python -m emotion_knowledge path/to/audio.wav --diarize \
+    --diarization-model mistralai/Voxtral-Small-24B-2507
+```
+
 For example, the following command uses the smaller `base` model:
 
 ```bash
