@@ -60,7 +60,9 @@ python -m emotion_knowledge path/to/audio.wav --diarize \
 
 Use `--whisperx-model` to choose the WhisperX model size when diarization is
 enabled. The default is `medium`, but you can also select `base`, `small`, or
-`large` depending on your resource constraints.
+`large` depending on your resource constraints. The workflow automatically
+selects the compute type: `float16` when a CUDA-enabled GPU is available and
+`int8` otherwise, logging the chosen precision for transparency.
 
 Short backchannel interjections are preserved as separate utterances. Pass
 `--no-preserve-backchannels` to merge them back into the surrounding speech. Use

@@ -382,9 +382,16 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
 
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
     device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    logger.info("Starting WhisperX transcription using model '%s'", model_size)
-    model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
+    compute_type = "float16" if device == "cuda" else "int8"
+    logger.info(
+        "Starting WhisperX transcription using model '%s' with compute type '%s' on %s",
+        model_size,
+        compute_type,
+        device,
+    )
+    model = whisperx.load_model(
+        model_size, device=device, language="de", compute_type=compute_type
+    )
     result = model.transcribe(audio_path)
     logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
 
