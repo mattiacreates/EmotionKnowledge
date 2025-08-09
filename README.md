@@ -62,6 +62,10 @@ Use `--whisperx-model` to choose the WhisperX model size when diarization is
 enabled. The default is `medium`, but you can also select `base`, `small`, or
 `large` depending on your resource constraints.
 
+Short backchannel interjections are preserved as separate utterances. Pass
+`--no-preserve-backchannels` to merge them back into the surrounding speech. Use
+`--preserve-end-times` to keep original end timestamps (enabled by default).
+
 For example, the following command uses the smaller `base` model:
 
 ```bash
