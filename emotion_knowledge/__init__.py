@@ -245,11 +245,16 @@ def _group_utterances(
 
 
 @tool
-def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
+def transcribe_diarize_whisperx(
+    audio_path: str,
+    model_size: str = "medium",
+    diarization_model: str = "pyannote/speaker-diarization-3.1",
+):
     """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
 
     ``model_size`` controls which WhisperX model checkpoint is loaded
-    (e.g. ``base``, ``small``, ``medium``, ``large``).
+    (e.g. ``base``, ``small``, ``medium``, ``large``). ``diarization_model``
+    can be any Hugging Face model compatible with :class:`whisperx.DiarizationPipeline`.
 
     Returns a dict with ``text`` and ``segments`` keys so downstream code can
     further process the diarized segments.
@@ -281,7 +286,9 @@ def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
     aligned_segments = aligned_output.get("segments", [])
 
     token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
-    diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
+    diarize_model = whisperx.DiarizationPipeline(
+        model_name=diarization_model, device=device, use_auth_token=token
+    )
     diarize_segments = diarize_model(audio_path)
     logger.info("Diarization complete with %d segments", len(diarize_segments))
 
@@ -370,10 +377,15 @@ class WhisperXDiarizationWorkflow(Runnable):
         db_path: str = "segment_db",
         clip_dir: str = "clips",
         model_size: str = "medium",
+        diarization_model: str = "pyannote/speaker-diarization-3.1",
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
-            {"audio_path": audio_path, "model_size": model_size}
+            {
+                "audio_path": audio_path,
+                "model_size": model_size,
+                "diarization_model": diarization_model,
+            }
         )
         if isinstance(result, dict):
             text = result.get("text", "")
@@ -431,6 +443,11 @@ def main():
         default="medium",
         help="WhisperX model size to use (base, small, medium, large)",
     )
+    parser.add_argument(
+        "--diarization-model",
+        default="pyannote/speaker-diarization-3.1",
+        help="Hugging Face model ID for speaker diarization",
+    )
     args = parser.parse_args()
 
     if args.diarize:
@@ -440,6 +457,7 @@ def main():
             db_path=args.db_path,
             clip_dir=args.clip_dir,
             model_size=args.whisperx_model,
+            diarization_model=args.diarization_model,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
