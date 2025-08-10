@@ -1,5 +1,5 @@
 transformers==4.38.2
-whisperx
 langchain-core
 chromadb
 pydub
+nemo_toolkit[asr]

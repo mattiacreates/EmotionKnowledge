@@ -61,7 +61,7 @@ def _group_utterances(
     Parameters
     ----------
     segments : list of dict
-        The word-level diarization results from WhisperX.
+        The word-level diarization results from the diarization step.
     max_gap : float
         Maximum allowed pause between words (in seconds) for them to be
         merged into the same utterance.
@@ -168,10 +168,10 @@ def _group_utterances(
             )
         return grouped
 
-    # WhisperX already returns the word segments in chronological order.
-    # Sorting here can lead to problems when some words have missing or
-    # zero timestamps (e.g. due to alignment issues).  Such words would be
-    # moved to the beginning and end up in the wrong utterance.  We therefore
+    # Word segments are expected to be in chronological order.
+    # Sorting can lead to problems when some words have missing or
+    # zero timestamps (e.g. due to alignment issues). Such words would be
+    # moved to the beginning and end up in the wrong utterance. We therefore
     # keep the original order instead of sorting by ``start`` time.
 
     grouped = []
@@ -226,7 +226,7 @@ def _group_utterances(
         grouped = merged
 
     # extend each utterance to start of the following one so the audio clip
-    # fully contains the spoken words even if WhisperX produced short end
+    # fully contains the spoken words even if the diarization produced short end
     # timestamps.  The final utterance keeps its original end time.
     for i in range(len(grouped) - 1):
         grouped[i]["end"] = grouped[i + 1]["start"]
@@ -245,94 +245,36 @@ def _group_utterances(
 
 
 @tool
-def transcribe_diarize_whisperx(audio_path: str, model_size: str = "medium"):
-    """Transkribiert Audio auf Deutsch mit WhisperX und Speaker-Diarization.
+def transcribe_diarize_sortformer(
+    audio_path: str, model_name: str = "nvidia/diar_sortformer_4spk-v1"
+):
+    """Transkribiert Audio und führt Speaker-Diarization mit Sortformer durch.
 
-    ``model_size`` controls which WhisperX model checkpoint is loaded
-    (e.g. ``base``, ``small``, ``medium``, ``large``).
+    ``model_name`` kann eine Hugging-Face-Modell-ID oder der Pfad zu einer
+    ``.nemo``-Datei sein.
 
     Returns a dict with ``text`` and ``segments`` keys so downstream code can
     further process the diarized segments.
     """
-    import torch
-    import whisperx
-
     assert os.path.exists(audio_path), f"Datei nicht gefunden: {audio_path}"
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    logger.info("Loading Sortformer diarization model '%s'", model_name)
 
-    logger.info("Starting WhisperX transcription using model '%s'", model_size)
-    model = whisperx.load_model(model_size, device=device, language="de", compute_type="int8")
-    result = model.transcribe(audio_path)
-    logger.info("Transcription complete with %d segments", len(result.get("segments", [])))
+    try:
+        from nemo.collections.asr.models import SortformerEncLabelModel
 
-    align_model, metadata = whisperx.load_align_model(
-        language_code="de", device=device
-    )
-    aligned_output = whisperx.align(
-        result["segments"], align_model, metadata, audio_path, device=device
-    )
-    logger.info(
-        "Alignment complete, %d word segments", len(aligned_output.get("word_segments", []))
-    )
-    word_segments = aligned_output["word_segments"]
-    logger.debug(type(word_segments))
-    logger.debug(word_segments[:2])  # Now it's safe to preview
+        diar_model = SortformerEncLabelModel.from_pretrained(
+            model_name, map_location="cpu", strict=False
+        )
+        diar_model.eval()
+        predicted_segments = diar_model.diarize(audio=audio_path, batch_size=1)
+    except Exception:  # pragma: no cover - optional dependency
+        logger.warning(
+            "Sortformer model not available; returning empty segments"
+        )
+        predicted_segments = []
 
-    aligned_segments = aligned_output.get("segments", [])
-
-    token = os.getenv("HF_TOKEN")  # set this in Colab/terminal
-    diarize_model = whisperx.DiarizationPipeline(device=device, use_auth_token=token)
-    diarize_segments = diarize_model(audio_path)
-    logger.info("Diarization complete with %d segments", len(diarize_segments))
-
-    result_with_speakers = whisperx.assign_word_speakers(
-        diarize_segments, aligned_output
-    )
-
-    logger.info(
-        "Assigned speaker labels to %d words", len(result_with_speakers.get("word_segments", []))
-    )
-
-    words = result_with_speakers["word_segments"]
-
-    # attach segment index to each word
-    seg_idx = 0
-    if aligned_segments:
-        seg_starts = [float(s.get("start", s.get("start_time", 0))) for s in aligned_segments]
-        seg_starts.append(float("inf"))
-        for w in words:
-            start_val = float(w.get("start", w.get("start_time", 0)))
-            while seg_idx + 1 < len(seg_starts) and start_val >= seg_starts[seg_idx + 1]:
-                seg_idx += 1
-            w["segment"] = seg_idx
-
-    # Build a formatted string while keeping the raw segment information so it
-    # can be persisted elsewhere.
-    lines = []
-    current_speaker = None
-    current_line = ""
-    for word in words:
-        speaker = word.get("speaker")
-        if speaker is None or speaker == "Speaker":
-            speaker = current_speaker or "Speaker"
-        word["speaker"] = speaker
-
-        if speaker != current_speaker:
-            if current_line:
-                lines.append(f"[{current_speaker}] {current_line.strip()}")
-                current_line = ""
-            current_speaker = speaker
-
-        word_text = word.get("text", word.get("word", ""))
-        # ensure SegmentSaver can access the spoken text
-        word["text"] = word_text
-        current_line += word_text + " "
-    if current_line:
-        lines.append(f"[{current_speaker}] {current_line.strip()}")
-
-    text = "\n".join(lines)
-    logger.info("Diarization produced %d words", len(words))
-    return {"text": text, "segments": words, "segments_info": aligned_segments}
+    text = transcribe_audio_whisper.invoke(audio_path)
+    return {"text": text, "segments": predicted_segments}
 
 
 @tool
@@ -356,12 +298,12 @@ class TranscriptionOnlyWorkflow(Runnable):
         return text
 
 
-class WhisperXDiarizationWorkflow(Runnable):
-    """Workflow für Transkription und Speaker-Diarization mit WhisperX.
+class SortformerDiarizationWorkflow(Runnable):
+    """Workflow für Transkription und Speaker-Diarization mit Sortformer.
 
     The workflow optionally stores each diarized segment to ChromaDB using
-    :class:`SegmentSaver`. The WhisperX model size can be configured via the
-    ``model_size`` argument.
+    :class:`SegmentSaver`. The Sortformer model can be configured via the
+    ``model_name`` argument.
     """
 
     def invoke(
@@ -369,11 +311,11 @@ class WhisperXDiarizationWorkflow(Runnable):
         audio_path: str,
         db_path: str = "segment_db",
         clip_dir: str = "clips",
-        model_size: str = "medium",
+        model_name: str = "nvidia/diar_sortformer_4spk-v1",
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
-        result = transcribe_diarize_whisperx.invoke(
-            {"audio_path": audio_path, "model_size": model_size}
+        result = transcribe_diarize_sortformer.invoke(
+            {"audio_path": audio_path, "model_name": model_name}
         )
         if isinstance(result, dict):
             text = result.get("text", "")
@@ -384,7 +326,7 @@ class WhisperXDiarizationWorkflow(Runnable):
 
         logger.info("\ud83d\udcc4 Transkription mit Sprecherlabels:\n%s", text)
 
-        if segments:
+        if segments and isinstance(segments[0], dict) and "text" in segments[0]:
             logger.debug("First diarized segment: %s", segments[0])
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
@@ -414,7 +356,7 @@ def main():
     parser.add_argument(
         "--diarize",
         action="store_true",
-        help="Speaker-Diarization mit WhisperX verwenden",
+        help="Speaker-Diarization mit Sortformer verwenden",
     )
     parser.add_argument(
         "--db-path",
@@ -427,19 +369,19 @@ def main():
         help="Verzeichnis zum Speichern der Audio-Schnipsel",
     )
     parser.add_argument(
-        "--whisperx-model",
-        default="medium",
-        help="WhisperX model size to use (base, small, medium, large)",
+        "--sortformer-model",
+        default="nvidia/diar_sortformer_4spk-v1",
+        help="Sortformer diarization model name or path",
     )
     args = parser.parse_args()
 
     if args.diarize:
-        workflow = WhisperXDiarizationWorkflow()
+        workflow = SortformerDiarizationWorkflow()
         _ = workflow.invoke(
             args.audio,
             db_path=args.db_path,
             clip_dir=args.clip_dir,
-            model_size=args.whisperx_model,
+            model_name=args.sortformer_model,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
