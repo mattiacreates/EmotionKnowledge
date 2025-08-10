@@ -25,7 +25,12 @@ logger = logging.getLogger(__name__)
 
 
 class SegmentSaver(Runnable):
-    """Save diarized segments to disk and ChromaDB."""
+    """Save diarized segments to disk and ChromaDB.
+
+    Call :meth:`reset_db` to clear the underlying Chroma database.  This can
+    also be triggered from the command line via ``python -m emotion_knowledge
+    --reset-db``.
+    """
 
     def __init__(
         self,
@@ -123,3 +128,14 @@ class SegmentSaver(Runnable):
             documents=[metadata["text"]], metadatas=[metadata], ids=[doc_id]
         )
         return {"clip_path": clip_path, "speaker": speaker, "doc_id": doc_id}
+
+    def reset_db(self) -> None:
+        """Reset the underlying ChromaDB instance.
+
+        Removes all collections using :meth:`chromadb.PersistentClient.reset`.
+        Useful for cleaning up between runs or tests.  The same operation can be
+        invoked from the command line with ``python -m emotion_knowledge
+        --reset-db``.
+        """
+
+        self.client.reset()
