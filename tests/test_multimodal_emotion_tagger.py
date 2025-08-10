@@ -20,9 +20,13 @@ class FakeClient:
     def __init__(self, path):
         self.path = path
         self.collection = FakeCollection()
+        self.reset_called = False
 
     def get_or_create_collection(self, name):
         return self.collection
+
+    def reset(self):
+        self.reset_called = True
 
 
 def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
@@ -59,4 +63,15 @@ def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
     assert metas[0]["duration"] == pytest.approx(0.5)
     assert metas[0]["n_words"] == 1
     assert metas[0]["overlaps_started"] is False
+
+
+def test_segment_saver_reset_db(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "emotion_knowledge.segment_saver.chromadb.PersistentClient",
+        FakeClient,
+    )
+
+    saver = SegmentSaver(db_path=str(tmp_path / "db"), output_dir=str(tmp_path))
+    saver.reset_db()
+    assert saver.client.reset_called
 
