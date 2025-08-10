@@ -204,10 +204,12 @@ def _group_utterances(
 
     grouped = []
     current = norm_segments[0].copy()
+    current_words = [norm_segments[0].copy()]
     prev_speaker = None
     suppress_tag = False
 
-    def append_current(utt):
+    def append_current(utt, words):
+        """Finalize the current utterance and store its word list."""
         nonlocal prev_speaker, suppress_tag
         if (
             tag_backchannels
@@ -217,6 +219,7 @@ def _group_utterances(
             and _is_backchannel(utt)
         ):
             utt["is_backchannel"] = True
+        utt["words"] = words
         grouped.append(utt)
         prev_speaker = utt["speaker"]
         suppress_tag = False
@@ -233,6 +236,7 @@ def _group_utterances(
         if seg["speaker"] == current["speaker"] and gap <= max_gap:
             current["text"] += " " + seg["text"]
             current["end"] = seg["end"]
+            current_words.append(seg)
             i += 1
             continue
 
@@ -249,29 +253,33 @@ def _group_utterances(
         ):
             if absorb_interjections:
                 current["text"] += " " + seg["text"]
+                current_words.append(seg)
                 next_seg = norm_segments[i + 1]
                 current["text"] += " " + next_seg["text"]
                 current["end"] = next_seg["end"]
+                current_words.append(next_seg)
                 i += 2
                 continue
             else:
-                append_current(current)
+                append_current(current, current_words)
                 interj = seg.copy()
                 if tag_backchannels and _is_backchannel(interj):
                     interj["is_backchannel"] = True
-                append_current(interj)
+                append_current(interj, [seg])
                 current = norm_segments[i + 1].copy()
+                current_words = [norm_segments[i + 1].copy()]
                 suppress_tag = True
                 i += 2
                 continue
 
-        append_current(current)
+        append_current(current, current_words)
         current = seg.copy()
+        current_words = [seg.copy()]
         i += 1
-
-    append_current(current)
+    append_current(current, current_words)
     if merge_sentences and grouped:
         merged = [grouped[0].copy()]
+        merged[0]["words"] = grouped[0]["words"].copy()
         for utt in grouped[1:]:
             if (
                 utt["speaker"] == merged[-1]["speaker"]
@@ -280,9 +288,51 @@ def _group_utterances(
             ):
                 merged[-1]["text"] += " " + utt["text"]
                 merged[-1]["end"] = utt["end"]
+                merged[-1]["words"].extend(utt.get("words", []))
             else:
-                merged.append(utt.copy())
+                new_utt = utt.copy()
+                new_utt["words"] = utt.get("words", []).copy()
+                merged.append(new_utt)
         grouped = merged
+
+    # Compute statistics for each utterance
+    for utt in grouped:
+        words = utt.get("words", [])
+        utt["n_words"] = len(words)
+        duration = utt["end"] - utt["start"]
+        utt["duration"] = duration
+        utt["words_per_sec"] = (len(words) / duration) if duration > 0 else 0.0
+        gaps = [
+            words[i]["start"] - words[i - 1]["end"]
+            for i in range(1, len(words))
+        ]
+        if gaps:
+            utt["mean_word_gap"] = sum(gaps) / len(gaps)
+            sorted_gaps = sorted(gaps)
+            k = int(round(0.95 * (len(sorted_gaps) - 1)))
+            utt["p95_word_gap"] = sorted_gaps[k]
+        else:
+            utt["mean_word_gap"] = 0.0
+            utt["p95_word_gap"] = 0.0
+
+    # Determine whether each utterance starts during another speaker's speech
+    prev_end = None
+    prev_speaker = None
+    for utt in grouped:
+        if (
+            prev_end is not None
+            and utt["start"] < prev_end
+            and utt["speaker"] != prev_speaker
+        ):
+            utt["overlaps_started"] = True
+        else:
+            utt["overlaps_started"] = False
+        if prev_end is None or utt["end"] > prev_end:
+            prev_end = utt["end"]
+            prev_speaker = utt["speaker"]
+
+    for utt in grouped:
+        utt.pop("words", None)
 
     logger.info("Created %d utterances", len(grouped))
     for idx, utt in enumerate(grouped, 1):

@@ -109,6 +109,16 @@ class SegmentSaver(Runnable):
             "text": segment.get("text", ""),
             "audio_clip_path": clip_path,
         }
+        for key in (
+            "duration",
+            "n_words",
+            "words_per_sec",
+            "mean_word_gap",
+            "p95_word_gap",
+            "overlaps_started",
+        ):
+            if key in segment:
+                metadata[key] = segment[key]
         self.collection.add(
             documents=[metadata["text"]], metadatas=[metadata], ids=[doc_id]
         )
