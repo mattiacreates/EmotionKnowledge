@@ -14,6 +14,10 @@ try:
     import chromadb
 except Exception:  # pragma: no cover - optional dependency
     class _MissingChroma:  # minimal stub so tests can patch PersistentClient
+        class Settings:
+            def __init__(self, *args, **kwargs):
+                raise ImportError("chromadb is required for this feature")
+
         class PersistentClient:
             def __init__(self, *args, **kwargs):
                 raise ImportError("chromadb is required for this feature")
@@ -39,10 +43,16 @@ class SegmentSaver(Runnable):
         output_dir: str = "clips",
         end_buffer_ms: int = 50,
         trim_silence: bool = True,
+        allow_reset: bool = False,
     ) -> None:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=db_path)
+        self.allow_reset = allow_reset
+        if allow_reset:
+            settings = chromadb.Settings(allow_reset=True)
+            self.client = chromadb.PersistentClient(path=db_path, settings=settings)
+        else:
+            self.client = chromadb.PersistentClient(path=db_path)
         self.collection = self.client.get_or_create_collection(collection_name)
         self.end_buffer_ms = max(0, int(end_buffer_ms))
         self.trim_silence = trim_silence
@@ -135,7 +145,10 @@ class SegmentSaver(Runnable):
         Removes all collections using :meth:`chromadb.PersistentClient.reset`.
         Useful for cleaning up between runs or tests.  The same operation can be
         invoked from the command line with ``python -m emotion_knowledge
-        --reset-db``.
+        --reset-db``.  The :class:`SegmentSaver` must be constructed with
+        ``allow_reset=True`` for this operation to succeed.
         """
 
+        if not self.allow_reset:
+            raise PermissionError("Reset requires allow_reset=True")
         self.client.reset()

@@ -1,7 +1,9 @@
 """Command line entry point for :mod:`emotion_knowledge`.
 
 Provides a ``--reset-db`` flag that clears the persistent Chroma database
-before delegating to :func:`emotion_knowledge.main`.
+before delegating to :func:`emotion_knowledge.main`.  The reset operation
+requires an explicit opt-in and will construct the underlying client with
+``allow_reset=True``.
 
 Example
 -------
@@ -31,7 +33,7 @@ def run() -> None:
     if args.reset_db:
         from .segment_saver import SegmentSaver
 
-        SegmentSaver().reset_db()
+        SegmentSaver(allow_reset=True).reset_db()
 
     sys.argv = [sys.argv[0]] + remaining
     pkg_main()
