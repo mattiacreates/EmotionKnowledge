@@ -60,7 +60,13 @@ python -m emotion_knowledge path/to/audio.wav --diarize \
 
 Use `--whisperx-model` to choose the WhisperX model size when diarization is
 enabled. The default is `medium`, but you can also select `base`, `small`, or
-`large` depending on your resource constraints.
+`large` depending on your resource constraints. The workflow automatically
+selects the compute type: `float16` when a CUDA-enabled GPU is available and
+`int8` otherwise, logging the chosen precision for transparency.
+
+Short backchannel interjections are preserved as separate utterances. Pass
+`--no-preserve-backchannels` to merge them back into the surrounding speech. Use
+`--preserve-end-times` to keep original end timestamps (enabled by default).
 
 For example, the following command uses the smaller `base` model:
 
@@ -91,7 +97,7 @@ clones the repository and transcribes an audio file:
 %pip install -r EmotionKnowledge/requirements.txt
 
 # optional: extra models used by the annotators
-%pip install langchain transformers openai-whisper
+%pip install langchain transformers
 
 %cd EmotionKnowledge
 !python -m emotion_knowledge /path/to/audio.wav --diarize \
