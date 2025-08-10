@@ -148,3 +148,23 @@ def test_interjection_absorbed_when_requested():
     assert len(result) == 1
     assert result[0]["text"] == "Hallo hm Welt"
 
+
+def test_utterance_statistics_and_overlap():
+    segments = [
+        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "hi"},
+        {"speaker": "s1", "start": 1.0, "end": 1.2, "word": "there"},
+        {"speaker": "s2", "start": 1.1, "end": 1.5, "word": "yo"},
+    ]
+    result = _group_utterances(segments)
+    assert len(result) == 2
+    first, second = result
+    assert first["n_words"] == 2
+    assert first["duration"] == pytest.approx(1.2)
+    assert first["words_per_sec"] == pytest.approx(2 / 1.2)
+    assert first["mean_word_gap"] == pytest.approx(0.5)
+    assert first["p95_word_gap"] == pytest.approx(0.5)
+    assert first["overlaps_started"] is False
+    assert second["overlaps_started"] is True
+    assert second["n_words"] == 1
+    assert second["mean_word_gap"] == pytest.approx(0.0)
+

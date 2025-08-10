@@ -42,6 +42,12 @@ def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
             "end": 0.5,
             "speaker": "spk",
             "text": "hello",
+            "duration": 0.5,
+            "n_words": 1,
+            "words_per_sec": 2.0,
+            "mean_word_gap": 0.0,
+            "p95_word_gap": 0.0,
+            "overlaps_started": False,
         }
     )
 
@@ -50,4 +56,7 @@ def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
     docs, metas, ids = saver.collection.add_calls[0]
     assert metas[0]["text"] == "hello"
     assert metas[0]["speaker"] == "spk"
+    assert metas[0]["duration"] == pytest.approx(0.5)
+    assert metas[0]["n_words"] == 1
+    assert metas[0]["overlaps_started"] is False
 
