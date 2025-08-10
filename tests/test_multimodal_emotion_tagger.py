@@ -17,8 +17,9 @@ class FakeCollection:
 
 
 class FakeClient:
-    def __init__(self, path):
+    def __init__(self, path, settings=None):
         self.path = path
+        self.settings = settings
         self.collection = FakeCollection()
         self.reset_called = False
 
@@ -71,7 +72,20 @@ def test_segment_saver_reset_db(monkeypatch, tmp_path):
         FakeClient,
     )
 
-    saver = SegmentSaver(db_path=str(tmp_path / "db"), output_dir=str(tmp_path))
+    saver = SegmentSaver(
+        db_path=str(tmp_path / "db"), output_dir=str(tmp_path), allow_reset=True
+    )
     saver.reset_db()
     assert saver.client.reset_called
+
+
+def test_segment_saver_reset_requires_flag(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "emotion_knowledge.segment_saver.chromadb.PersistentClient",
+        FakeClient,
+    )
+
+    saver = SegmentSaver(db_path=str(tmp_path / "db"), output_dir=str(tmp_path))
+    with pytest.raises(PermissionError):
+        saver.reset_db()
 
