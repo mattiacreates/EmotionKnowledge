@@ -67,55 +67,6 @@ def test_end_time_not_modified_when_disabled():
     assert result[0]["end"] == pytest.approx(1.0)
 
 
-def test_short_interjection_becomes_backchannel():
-    segments = [
-        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "hm"},
-        {"speaker": "s1", "start": 0.6, "end": 1.0, "word": "Welt"},
-    ]
-    result = _group_utterances(segments)
-    assert [utt["text"] for utt in result] == ["Hallo", "hm", "Welt"]
-    assert result[1]["is_backchannel"] is True
-
-
-def test_long_single_word_interjection_backchannel():
-    segments = [
-        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {"speaker": "s2", "start": 0.5, "end": 1.4, "word": "hm"},
-        {"speaker": "s1", "start": 1.4, "end": 2.0, "word": "Welt"},
-    ]
-    result = _group_utterances(segments)
-    assert [utt["text"] for utt in result] == ["Hallo", "hm", "Welt"]
-    assert result[1]["is_backchannel"] is True
-
-
-def test_multi_word_interjection_tagged_backchannel():
-    segments = [
-        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {"speaker": "s2", "start": 0.5, "end": 1.7, "text": "ach so"},
-        {"speaker": "s1", "start": 1.7, "end": 2.2, "word": "Welt"},
-    ]
-    result = _group_utterances(segments)
-    assert [utt["text"] for utt in result] == ["Hallo", "ach so", "Welt"]
-    assert result[1]["is_backchannel"] is True
-
-
-def test_long_multi_word_interruption_not_backchannel():
-    segments = [
-        {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
-        {
-            "speaker": "s2",
-            "start": 0.5,
-            "end": 2.0,
-            "text": "das ist aber wirklich",
-        },
-        {"speaker": "s1", "start": 2.0, "end": 2.5, "word": "Welt"},
-    ]
-    result = _group_utterances(segments)
-    assert [utt["text"] for utt in result] == ["Hallo", "das ist aber wirklich", "Welt"]
-    assert "is_backchannel" not in result[1]
-
-
 def test_same_segment_id_overrides_gap():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo", "segment": 0},

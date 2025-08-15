@@ -52,9 +52,6 @@ def _group_utterances(
     segments_info=None,
     merge_sentences: bool = False,
     absorb_interjections: bool = False,
-    backchannel_max_dur: float = 0.7,
-    backchannel_max_words: int = 3,
-    tag_backchannels: bool = True,
     preserve_end_times: bool = True,
 ):
     """Merge word-level segments into full utterances.
@@ -73,13 +70,6 @@ def _group_utterances(
         When ``True`` short interjections from other speakers are merged back
         into the surrounding utterance.  When ``False`` (default) they remain
         separate utterances.
-    backchannel_max_dur : float, optional
-        Maximum duration (in seconds) for an utterance to qualify as a
-        backchannel.
-    backchannel_max_words : int, optional
-        Maximum number of words for an utterance to qualify as a backchannel.
-    tag_backchannels : bool, optional
-        When ``True`` add ``is_backchannel=True`` to detected backchannels.
     preserve_end_times : bool, optional
         Deprecated. End timestamps are always taken from the final word in each
         utterance. This parameter is retained for backwards compatibility and
@@ -90,15 +80,6 @@ def _group_utterances(
         return []
 
     logger.info("Grouping %d word segments into utterances", len(segments))
-
-    def _is_backchannel(seg):
-        dur = seg["end"] - seg["start"]
-        wc = len(seg["text"].strip().split())
-        return dur <= backchannel_max_dur or wc <= backchannel_max_words
-
-    def _tag_backchannel(utt):
-        if tag_backchannels and _is_backchannel(utt):
-            utt["is_backchannel"] = True
 
     norm_segments = []
     fallback_dur = 0.1
@@ -167,18 +148,13 @@ def _group_utterances(
                 "text": " ".join(w["text"] for w in group),
                 "words": group,
             }
-            _tag_backchannel(utt)
             grouped.append(utt)
 
         if merge_sentences and grouped:
             merged = [grouped[0].copy()]
             merged[0]["words"] = grouped[0]["words"].copy()
             for utt in grouped[1:]:
-                if (
-                    utt["speaker"] == merged[-1]["speaker"]
-                    and not merged[-1].get("is_backchannel")
-                    and not utt.get("is_backchannel")
-                ):
+                if utt["speaker"] == merged[-1]["speaker"]:
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
                     merged[-1]["words"].extend(utt.get("words", []))
@@ -197,23 +173,13 @@ def _group_utterances(
         current = norm_segments[0].copy()
         current_words = [norm_segments[0].copy()]
         prev_speaker = None
-        suppress_tag = False
 
         def append_current(utt, words):
             """Finalize the current utterance and store its word list."""
-            nonlocal prev_speaker, suppress_tag
-            if (
-                tag_backchannels
-                and not suppress_tag
-                and prev_speaker is not None
-                and utt["speaker"] != prev_speaker
-                and _is_backchannel(utt)
-            ):
-                utt["is_backchannel"] = True
+            nonlocal prev_speaker
             utt["words"] = words
             grouped.append(utt)
             prev_speaker = utt["speaker"]
-            suppress_tag = False
 
         # interjections shorter than this duration or consisting of a single word
         # are candidates to be absorbed
@@ -254,12 +220,9 @@ def _group_utterances(
                 else:
                     append_current(current, current_words)
                     interj = seg.copy()
-                    if tag_backchannels and _is_backchannel(interj):
-                        interj["is_backchannel"] = True
                     append_current(interj, [seg])
                     current = norm_segments[i + 1].copy()
                     current_words = [norm_segments[i + 1].copy()]
-                    suppress_tag = True
                     i += 2
                     continue
 
@@ -272,11 +235,7 @@ def _group_utterances(
             merged = [grouped[0].copy()]
             merged[0]["words"] = grouped[0]["words"].copy()
             for utt in grouped[1:]:
-                if (
-                    utt["speaker"] == merged[-1]["speaker"]
-                    and not merged[-1].get("is_backchannel")
-                    and not utt.get("is_backchannel")
-                ):
+                if utt["speaker"] == merged[-1]["speaker"]:
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
                     merged[-1]["words"].extend(utt.get("words", []))
@@ -338,13 +297,33 @@ def _group_utterances(
     return grouped
 
 
+def _mark_backchannels(df):
+    """Tag backchannel word runs based on speaker changes within segments."""
+    if "Is_backchannel" not in df.columns:
+        df["Is_backchannel"] = False
+    else:
+        df["Is_backchannel"] = False
+    for _, seg_df in df.groupby("segment", sort=False):
+        run_id = (seg_df["speaker"].ne(seg_df["speaker"].shift())).cumsum()
+        non_empty = seg_df["text"].fillna("").astype(str) != ""
+        run_lengths = non_empty.groupby(run_id).transform("sum")
+        if non_empty.any():
+            first_speaker = seg_df.loc[non_empty, "speaker"].iloc[0]
+        else:
+            first_speaker = seg_df["speaker"].iloc[0]
+        mask = (seg_df["speaker"] != first_speaker) & (run_lengths >= 3)
+        df.loc[seg_df.index, "Is_backchannel"] = mask
+    return df
+
+
 def export_word_level_excel(
     words,
     path: str = "Single_Word_Transcript.xlsx",
-    backchannel_max_dur: float = 0.7,
-    backchannel_max_words: int = 3,
 ):
     """Export word-level segments to Excel with a CSV fallback.
+
+    The resulting file contains one row per word including a recomputed
+    ``Is_backchannel`` column based on speaker runs within each segment.
 
     Parameters
     ----------
@@ -352,10 +331,6 @@ def export_word_level_excel(
         Word-level diarization results.
     path : str, optional
         Output path for the Excel file.
-    backchannel_max_dur : float, optional
-        Duration threshold for backchannel detection in seconds.
-    backchannel_max_words : int, optional
-        Word-count threshold for backchannel detection.
     """
 
     if not words:
@@ -363,16 +338,7 @@ def export_word_level_excel(
 
     import pandas as pd
 
-    utterances = _group_utterances(
-        words,
-        backchannel_max_dur=backchannel_max_dur,
-        backchannel_max_words=backchannel_max_words,
-        tag_backchannels=True,
-    )
-    utterances = sorted(utterances, key=lambda u: u.get("start", 0))
-
     rows = []
-    utt_idx = 0
     for idx, w in enumerate(words, 1):
         start = float(w.get("start", w.get("start_time", 0)) or 0)
         end_val = w.get("end")
@@ -383,12 +349,6 @@ def export_word_level_excel(
         end = float(end_val)
         duration = max(0.0, end - start)
         text = w.get("text", w.get("word", ""))
-        while (
-            utt_idx + 1 < len(utterances)
-            and start >= utterances[utt_idx]["end"]
-        ):
-            utt_idx += 1
-        is_backchannel = bool(utterances[utt_idx].get("is_backchannel", False))
         rows.append(
             {
                 "idx": idx,
@@ -398,12 +358,12 @@ def export_word_level_excel(
                 "end": end,
                 "duration": duration,
                 "text": text,
-                "is_backchannel": is_backchannel,
             }
         )
 
     df = pd.DataFrame(rows)
     df.sort_values(["start", "idx"], inplace=True)
+    df = _mark_backchannels(df)
     try:
         df.to_excel(path, index=False)
         logger.info("Exported word-level transcript to %s", path)
@@ -590,9 +550,6 @@ class WhisperXDiarizationWorkflow(Runnable):
                 segments_info=result.get("segments_info"),
                 merge_sentences=True,
                 absorb_interjections=not preserve_backchannels,
-                tag_backchannels=True,
-                backchannel_max_dur=0.7,
-                backchannel_max_words=3,
                 preserve_end_times=preserve_end_times,
             )
             logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
