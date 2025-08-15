@@ -297,6 +297,142 @@ def _group_utterances(
     return grouped
 
 
+def _split_multispeaker_segments(words):
+    """Split long segments containing multiple speakers into subsegments.
+
+    Existing short segments (runs of fewer than three words) remain unchanged.
+    Within longer segments a new subsegment is started whenever a speaker has
+    a run of three or more consecutive words. Interjections of one or two
+    words are attached to the surrounding segment. Segment identifiers are
+    reassigned sequentially and the original word order is preserved.
+
+    Parameters
+    ----------
+    words : list of dict
+        Word-level items with keys ``segment``, ``speaker``, ``start``, ``end``
+        and either ``text`` or ``word``.
+
+    Returns
+    -------
+    list of dict
+        Recomputed segments with updated ``segment`` ids.
+    """
+
+    if not words:
+        return []
+
+    def _get_text(w):
+        return w.get("text", w.get("word", ""))
+
+    # Group by existing segment id if present
+    groups = []
+    if all("segment" in w for w in words):
+        current_id = words[0]["segment"]
+        buf = []
+        for w in words:
+            seg_id = w["segment"]
+            if seg_id != current_id:
+                if buf:
+                    groups.append(buf)
+                buf = [w]
+                current_id = seg_id
+            else:
+                buf.append(w)
+        if buf:
+            groups.append(buf)
+    else:
+        groups = [words]
+
+    new_segments = []
+    new_id = 1
+
+    for group in groups:
+        if not group:
+            continue
+        unique_speakers = {w.get("speaker") for w in group}
+        if len(group) < 3 or len(unique_speakers) == 1:
+            start = group[0]["start"]
+            end = group[-1]["end"]
+            text = " ".join(_get_text(w) for w in group)
+            speaker = group[0].get("speaker")
+            for w in group:
+                w["segment"] = new_id
+            new_segments.append(
+                {
+                    "segment": new_id,
+                    "speaker": speaker,
+                    "start": start,
+                    "end": end,
+                    "text": text,
+                }
+            )
+            new_id += 1
+            continue
+
+        # Build runs of consecutive words by speaker
+        runs = []
+        run_speaker = group[0]["speaker"]
+        run_words = [group[0]]
+        for w in group[1:]:
+            if w["speaker"] == run_speaker:
+                run_words.append(w)
+            else:
+                runs.append([run_speaker, run_words])
+                run_speaker = w["speaker"]
+                run_words = [w]
+        runs.append([run_speaker, run_words])
+
+        # Merge leading short runs into the first subsequent run with >=3 words
+        while (
+            len(runs) > 1
+            and len(runs[0][1]) < 3
+            and any(len(r[1]) >= 3 for r in runs[1:])
+        ):
+            runs[1][1] = runs[0][1] + runs[1][1]
+            runs.pop(0)
+
+        current_speaker, current_words = runs[0]
+        for spk, words_run in runs[1:]:
+            if spk != current_speaker and len(words_run) >= 3:
+                start = current_words[0]["start"]
+                end = current_words[-1]["end"]
+                text = " ".join(_get_text(w) for w in current_words)
+                for w in current_words:
+                    w["segment"] = new_id
+                new_segments.append(
+                    {
+                        "segment": new_id,
+                        "speaker": current_speaker,
+                        "start": start,
+                        "end": end,
+                        "text": text,
+                    }
+                )
+                new_id += 1
+                current_speaker = spk
+                current_words = words_run
+            else:
+                current_words.extend(words_run)
+
+        start = current_words[0]["start"]
+        end = current_words[-1]["end"]
+        text = " ".join(_get_text(w) for w in current_words)
+        for w in current_words:
+            w["segment"] = new_id
+        new_segments.append(
+            {
+                "segment": new_id,
+                "speaker": current_speaker,
+                "start": start,
+                "end": end,
+                "text": text,
+            }
+        )
+        new_id += 1
+
+    return new_segments
+
+
 def export_word_level_excel(
     words,
     path: str = "Single_Word_Transcript.xlsx",
