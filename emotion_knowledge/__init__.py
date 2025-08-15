@@ -363,7 +363,16 @@ def export_word_level_excel(
 
     import pandas as pd
 
+    utterances = _group_utterances(
+        words,
+        backchannel_max_dur=backchannel_max_dur,
+        backchannel_max_words=backchannel_max_words,
+        tag_backchannels=True,
+    )
+    utterances = sorted(utterances, key=lambda u: u.get("start", 0))
+
     rows = []
+    utt_idx = 0
     for idx, w in enumerate(words, 1):
         start = float(w.get("start", w.get("start_time", 0)) or 0)
         end_val = w.get("end")
@@ -374,10 +383,12 @@ def export_word_level_excel(
         end = float(end_val)
         duration = max(0.0, end - start)
         text = w.get("text", w.get("word", ""))
-        word_count = len(str(text).strip().split())
-        is_backchannel = (
-            duration <= backchannel_max_dur or word_count <= backchannel_max_words
-        )
+        while (
+            utt_idx + 1 < len(utterances)
+            and start >= utterances[utt_idx]["end"]
+        ):
+            utt_idx += 1
+        is_backchannel = bool(utterances[utt_idx].get("is_backchannel", False))
         rows.append(
             {
                 "idx": idx,
