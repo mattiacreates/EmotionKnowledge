@@ -163,24 +163,18 @@ def _group_utterances(
                             run_words = [w]
                     runs.append((run_speaker, run_words))
 
-                    eligible_speakers = {
-                        spk
-                        for spk, words_run in runs
-                        if len(words_run) >= backchannel_run_min_words
-                    }
-                    if len(eligible_speakers) >= 2:
-                        for spk, words_run in runs:
-                            utt = {
-                                "speaker": spk,
-                                "start": words_run[0]["start"],
-                                "end": words_run[-1]["end"],
-                                "text": " ".join(w["text"] for w in words_run),
-                                "words": words_run,
-                            }
-                            if len(words_run) >= backchannel_run_min_words:
-                                utt["is_backchannel"] = True
-                            grouped.append(utt)
-                        continue
+                    for spk, words_run in runs:
+                        utt = {
+                            "speaker": spk,
+                            "start": words_run[0]["start"],
+                            "end": words_run[-1]["end"],
+                            "text": " ".join(w["text"] for w in words_run),
+                            "words": words_run,
+                        }
+                        if len(words_run) >= backchannel_run_min_words:
+                            utt["is_backchannel"] = True
+                        grouped.append(utt)
+                    continue
 
             speaker_counts = {}
             for w in group:
