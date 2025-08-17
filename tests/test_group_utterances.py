@@ -148,6 +148,7 @@ def test_merge_sentences_skips_backchannels():
     segments = [
         {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
         {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "there"},
+
         {"segment": 0, "speaker": "B", "start": 0.2, "end": 0.3, "text": "um"},
         {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "yes"},
         {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "indeed"},
