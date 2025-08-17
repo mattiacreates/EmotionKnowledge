@@ -43,15 +43,15 @@ def test_export_word_level_excel_fallback_csv(tmp_path, monkeypatch):
 
 def test_export_word_level_excel_backchannel_tags(tmp_path, monkeypatch):
     words = [
-        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.3, "text": "hi"},
-        {"segment": 0, "speaker": "A", "start": 0.35, "end": 0.6, "text": "there"},
-        {"segment": 0, "speaker": "A", "start": 0.65, "end": 0.9, "text": "everyone"},
-        {"segment": 0, "speaker": "A", "start": 0.95, "end": 1.2, "text": "today"},
-        {"segment": 1, "speaker": "B", "start": 1.3, "end": 1.4, "text": "um"},
-        {"segment": 2, "speaker": "A", "start": 1.5, "end": 1.7, "text": "how"},
-        {"segment": 2, "speaker": "A", "start": 1.75, "end": 1.95, "text": "are"},
-        {"segment": 2, "speaker": "A", "start": 2.0, "end": 2.2, "text": "you"},
-        {"segment": 2, "speaker": "A", "start": 2.25, "end": 2.6, "text": "doing"},
+        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
+        {"segment": 0, "speaker": "A", "start": 0.2, "end": 0.3, "text": "there"},
+        {"segment": 0, "speaker": "A", "start": 0.35, "end": 0.45, "text": "everyone"},
+        {"segment": 0, "speaker": "B", "start": 0.5, "end": 0.6, "text": "um"},
+        {"segment": 0, "speaker": "B", "start": 0.65, "end": 0.75, "text": "yes"},
+        {"segment": 0, "speaker": "B", "start": 0.8, "end": 0.9, "text": "indeed"},
+        {"segment": 0, "speaker": "B", "start": 0.95, "end": 1.05, "text": "haha"},
+        {"segment": 0, "speaker": "A", "start": 1.1, "end": 1.2, "text": "ok"},
+        {"segment": 0, "speaker": "A", "start": 1.25, "end": 1.35, "text": "bye"},
     ]
 
     def raise_import_error(*args, **kwargs):
@@ -59,9 +59,15 @@ def test_export_word_level_excel_backchannel_tags(tmp_path, monkeypatch):
 
     monkeypatch.setattr(pd.DataFrame, "to_excel", raise_import_error)
     out = tmp_path / "Single_Word_Transcript.xlsx"
-    path = export_word_level_excel(words, str(out))
+    path = export_word_level_excel(
+        words,
+        str(out),
+        multi_spk_seg_min_words=8,
+        backchannel_run_min_words=3,
+    )
     df = pd.read_csv(path)
 
-    assert df[df["speaker"] == "B"]["is_backchannel"].all()
-    assert not df[df["speaker"] == "A"]["is_backchannel"].any()
+    assert df.iloc[0:3]["is_backchannel"].all()
+    assert df.iloc[3:7]["is_backchannel"].all()
+    assert not df.iloc[7:]["is_backchannel"].any()
 
