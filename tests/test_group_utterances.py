@@ -148,12 +148,12 @@ def test_merge_sentences_skips_backchannels():
     segments = [
         {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
         {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "there"},
-
-        {"segment": 0, "speaker": "B", "start": 0.2, "end": 0.3, "text": "um"},
-        {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "yes"},
-        {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "indeed"},
-        {"segment": 0, "speaker": "A", "start": 0.5, "end": 0.6, "text": "ok"},
-        {"segment": 1, "speaker": "A", "start": 0.7, "end": 0.8, "text": "bye"},
+        {"segment": 0, "speaker": "A", "start": 0.2, "end": 0.3, "text": "everyone"},
+        {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "um"},
+        {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "yes"},
+        {"segment": 0, "speaker": "B", "start": 0.5, "end": 0.6, "text": "indeed"},
+        {"segment": 0, "speaker": "A", "start": 0.6, "end": 0.7, "text": "ok"},
+        {"segment": 1, "speaker": "A", "start": 0.8, "end": 0.9, "text": "bye"},
     ]
     result = _group_utterances(
         segments,
@@ -163,13 +163,33 @@ def test_merge_sentences_skips_backchannels():
     )
     assert len(result) == 3
     assert [utt["text"] for utt in result] == [
-        "hi there",
+        "hi there everyone",
         "um yes indeed",
         "ok bye",
     ]
-    assert "is_backchannel" not in result[0]
+    assert result[0]["is_backchannel"] is True
     assert result[1]["is_backchannel"] is True
     assert "is_backchannel" not in result[2]
+
+
+def test_run_logic_collapses_without_two_eligible_speakers():
+    segments = [
+        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
+        {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "there"},
+        {"segment": 0, "speaker": "B", "start": 0.2, "end": 0.3, "text": "um"},
+        {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "yes"},
+        {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "indeed"},
+        {"segment": 0, "speaker": "A", "start": 0.5, "end": 0.6, "text": "ok"},
+    ]
+    result = _group_utterances(
+        segments,
+        multi_spk_seg_min_words=5,
+        backchannel_run_min_words=3,
+    )
+    assert len(result) == 1
+    assert result[0]["speaker"] == "A"
+    assert result[0]["text"] == "hi there um yes indeed ok"
+    assert "is_backchannel" not in result[0]
 
 
 def test_same_segment_id_overrides_gap():
