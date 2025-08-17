@@ -61,13 +61,13 @@ def test_end_time_not_modified_when_disabled():
         {"speaker": "speaker_01", "start": 0.0, "end": 1.0, "word": "Hallo"},
         {"speaker": "speaker_01", "start": 5.0, "end": 5.5, "word": "Welt"},
     ]
-    result = _group_utterances(segments, preserve_end_times=False)
+    result = _group_utterances(segments)
     assert len(result) == 2
     # end timestamps come from the final word regardless of preserve_end_times
     assert result[0]["end"] == pytest.approx(1.0)
 
 
-def test_short_interjection_becomes_backchannel():
+def test_short_interjection_not_backchannel():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
         {"speaker": "s2", "start": 0.5, "end": 0.6, "word": "hm"},
@@ -75,10 +75,10 @@ def test_short_interjection_becomes_backchannel():
     ]
     result = _group_utterances(segments)
     assert [utt["text"] for utt in result] == ["Hallo", "hm", "Welt"]
-    assert result[1]["is_backchannel"] is True
+    assert "is_backchannel" not in result[1]
 
 
-def test_long_single_word_interjection_backchannel():
+def test_long_single_word_interjection_not_backchannel():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
         {"speaker": "s2", "start": 0.5, "end": 1.4, "word": "hm"},
@@ -86,10 +86,10 @@ def test_long_single_word_interjection_backchannel():
     ]
     result = _group_utterances(segments)
     assert [utt["text"] for utt in result] == ["Hallo", "hm", "Welt"]
-    assert result[1]["is_backchannel"] is True
+    assert "is_backchannel" not in result[1]
 
 
-def test_multi_word_interjection_tagged_backchannel():
+def test_multi_word_interjection_not_backchannel():
     segments = [
         {"speaker": "s1", "start": 0.0, "end": 0.5, "word": "Hallo"},
         {"speaker": "s2", "start": 0.5, "end": 1.7, "text": "ach so"},
@@ -97,7 +97,7 @@ def test_multi_word_interjection_tagged_backchannel():
     ]
     result = _group_utterances(segments)
     assert [utt["text"] for utt in result] == ["Hallo", "ach so", "Welt"]
-    assert result[1]["is_backchannel"] is True
+    assert "is_backchannel" not in result[1]
 
 
 def test_long_multi_word_interruption_not_backchannel():
@@ -114,6 +114,84 @@ def test_long_multi_word_interruption_not_backchannel():
     result = _group_utterances(segments)
     assert [utt["text"] for utt in result] == ["Hallo", "das ist aber wirklich", "Welt"]
     assert "is_backchannel" not in result[1]
+
+
+def test_run_based_backchannel_tagging():
+    segments = [
+        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
+        {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "there"},
+        {"segment": 0, "speaker": "A", "start": 0.2, "end": 0.3, "text": "everyone"},
+        {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "um"},
+        {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "yes"},
+        {"segment": 0, "speaker": "B", "start": 0.5, "end": 0.6, "text": "indeed"},
+        {"segment": 0, "speaker": "B", "start": 0.6, "end": 0.7, "text": "haha"},
+        {"segment": 0, "speaker": "A", "start": 0.7, "end": 0.8, "text": "ok"},
+        {"segment": 0, "speaker": "A", "start": 0.8, "end": 0.9, "text": "bye"},
+    ]
+    result = _group_utterances(
+        segments,
+        multi_spk_seg_min_words=8,
+        backchannel_run_min_words=3,
+    )
+    assert len(result) == 3
+    assert [utt["text"] for utt in result] == [
+        "hi there everyone",
+        "um yes indeed haha",
+        "ok bye",
+    ]
+    assert result[0]["is_backchannel"] is True
+    assert result[1]["is_backchannel"] is True
+    assert "is_backchannel" not in result[2]
+
+
+def test_merge_sentences_skips_backchannels():
+    segments = [
+        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "hi"},
+        {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "there"},
+        {"segment": 0, "speaker": "A", "start": 0.2, "end": 0.3, "text": "now"},
+        {"segment": 0, "speaker": "B", "start": 0.3, "end": 0.4, "text": "um"},
+        {"segment": 0, "speaker": "B", "start": 0.4, "end": 0.5, "text": "yes"},
+        {"segment": 0, "speaker": "B", "start": 0.5, "end": 0.6, "text": "indeed"},
+        {"segment": 0, "speaker": "A", "start": 0.6, "end": 0.7, "text": "ok"},
+        {"segment": 1, "speaker": "A", "start": 0.7, "end": 0.8, "text": "bye"},
+    ]
+    result = _group_utterances(
+        segments,
+        merge_sentences=True,
+        multi_spk_seg_min_words=5,
+        backchannel_run_min_words=3,
+    )
+    assert len(result) == 3
+    assert [utt["text"] for utt in result] == [
+        "hi there now",
+        "um yes indeed",
+        "ok bye",
+    ]
+    assert result[0]["is_backchannel"] is True
+    assert result[1]["is_backchannel"] is True
+    assert "is_backchannel" not in result[2]
+
+
+def test_run_logic_requires_two_speakers_meeting_threshold():
+    segments = [
+        {"segment": 0, "speaker": "A", "start": 0.0, "end": 0.1, "text": "w1"},
+        {"segment": 0, "speaker": "A", "start": 0.1, "end": 0.2, "text": "w2"},
+        {"segment": 0, "speaker": "A", "start": 0.2, "end": 0.3, "text": "w3"},
+        {"segment": 0, "speaker": "A", "start": 0.3, "end": 0.4, "text": "w4"},
+        {"segment": 0, "speaker": "A", "start": 0.4, "end": 0.5, "text": "w5"},
+        {"segment": 0, "speaker": "A", "start": 0.5, "end": 0.6, "text": "w6"},
+        {"segment": 0, "speaker": "A", "start": 0.6, "end": 0.7, "text": "w7"},
+        {"segment": 0, "speaker": "B", "start": 0.7, "end": 0.8, "text": "w8"},
+    ]
+    result = _group_utterances(
+        segments,
+        multi_spk_seg_min_words=8,
+        backchannel_run_min_words=3,
+    )
+    assert len(result) == 1
+    assert result[0]["speaker"] == "A"
+    assert result[0]["text"] == "w1 w2 w3 w4 w5 w6 w7 w8"
+    assert "is_backchannel" not in result[0]
 
 
 def test_same_segment_id_overrides_gap():

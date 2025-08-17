@@ -52,10 +52,8 @@ def _group_utterances(
     segments_info=None,
     merge_sentences: bool = False,
     absorb_interjections: bool = False,
-    backchannel_max_dur: float = 0.7,
-    backchannel_max_words: int = 3,
-    tag_backchannels: bool = True,
-    preserve_end_times: bool = True,
+    multi_spk_seg_min_words: int | None = None,
+    backchannel_run_min_words: int | None = None,
 ):
     """Merge word-level segments into full utterances.
 
@@ -73,32 +71,25 @@ def _group_utterances(
         When ``True`` short interjections from other speakers are merged back
         into the surrounding utterance.  When ``False`` (default) they remain
         separate utterances.
-    backchannel_max_dur : float, optional
-        Maximum duration (in seconds) for an utterance to qualify as a
-        backchannel.
-    backchannel_max_words : int, optional
-        Maximum number of words for an utterance to qualify as a backchannel.
-    tag_backchannels : bool, optional
-        When ``True`` add ``is_backchannel=True`` to detected backchannels.
-    preserve_end_times : bool, optional
-        Deprecated. End timestamps are always taken from the final word in each
-        utterance. This parameter is retained for backwards compatibility and
-        has no effect.
+    multi_spk_seg_min_words : int | None, optional
+        Minimum total words in a multi-speaker segment required to apply the
+        run-based utterance/backchannel logic. If ``None`` the standard
+        grouping logic is used.
+    backchannel_run_min_words : int | None, optional
+        Minimum consecutive words spoken by the same speaker (a run) for that
+        run to be tagged with ``is_backchannel=True``. Only used when
+        ``multi_spk_seg_min_words`` is also provided.
+
+    If both ``multi_spk_seg_min_words`` and ``backchannel_run_min_words`` are
+    set (not ``None``), use run-based utterance creation and backchannel tagging
+    within multi-speaker segments. Otherwise, use the standard grouping logic.
+    Old duration/word-count backchannel logic is removed.
     """
 
     if not segments:
         return []
 
     logger.info("Grouping %d word segments into utterances", len(segments))
-
-    def _is_backchannel(seg):
-        dur = seg["end"] - seg["start"]
-        wc = len(seg["text"].strip().split())
-        return dur <= backchannel_max_dur or wc <= backchannel_max_words
-
-    def _tag_backchannel(utt):
-        if tag_backchannels and _is_backchannel(utt):
-            utt["is_backchannel"] = True
 
     norm_segments = []
     fallback_dur = 0.1
@@ -130,6 +121,10 @@ def _group_utterances(
     elif all(seg.get("segment") is not None for seg in norm_segments):
         use_segment_ids = True
 
+    use_new_run_logic = (
+        multi_spk_seg_min_words is not None and backchannel_run_min_words is not None
+    )
+
     grouped = []
     if use_segment_ids:
         ordered_groups = []
@@ -153,6 +148,40 @@ def _group_utterances(
                 ordered_groups.append(buf)
 
         for group in ordered_groups:
+            if use_new_run_logic:
+                speakers_in_group = {w["speaker"] for w in group}
+                if len(group) >= multi_spk_seg_min_words and len(speakers_in_group) >= 2:
+                    runs = []
+                    run_speaker = group[0]["speaker"]
+                    run_words = [group[0]]
+                    for w in group[1:]:
+                        if w["speaker"] == run_speaker:
+                            run_words.append(w)
+                        else:
+                            runs.append((run_speaker, run_words))
+                            run_speaker = w["speaker"]
+                            run_words = [w]
+                    runs.append((run_speaker, run_words))
+
+                    eligible_speakers = {
+                        spk
+                        for spk, words_run in runs
+                        if len(words_run) >= backchannel_run_min_words
+                    }
+                    if len(eligible_speakers) >= 2:
+                        for spk, words_run in runs:
+                            utt = {
+                                "speaker": spk,
+                                "start": words_run[0]["start"],
+                                "end": words_run[-1]["end"],
+                                "text": " ".join(w["text"] for w in words_run),
+                                "words": words_run,
+                            }
+                            if len(words_run) >= backchannel_run_min_words:
+                                utt["is_backchannel"] = True
+                            grouped.append(utt)
+                        continue
+
             speaker_counts = {}
             for w in group:
                 sp = w["speaker"]
@@ -167,18 +196,18 @@ def _group_utterances(
                 "text": " ".join(w["text"] for w in group),
                 "words": group,
             }
-            _tag_backchannel(utt)
             grouped.append(utt)
 
         if merge_sentences and grouped:
             merged = [grouped[0].copy()]
             merged[0]["words"] = grouped[0]["words"].copy()
             for utt in grouped[1:]:
-                if (
+                can_merge = (
                     utt["speaker"] == merged[-1]["speaker"]
                     and not merged[-1].get("is_backchannel")
                     and not utt.get("is_backchannel")
-                ):
+                )
+                if can_merge:
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
                     merged[-1]["words"].extend(utt.get("words", []))
@@ -197,23 +226,13 @@ def _group_utterances(
         current = norm_segments[0].copy()
         current_words = [norm_segments[0].copy()]
         prev_speaker = None
-        suppress_tag = False
 
         def append_current(utt, words):
             """Finalize the current utterance and store its word list."""
-            nonlocal prev_speaker, suppress_tag
-            if (
-                tag_backchannels
-                and not suppress_tag
-                and prev_speaker is not None
-                and utt["speaker"] != prev_speaker
-                and _is_backchannel(utt)
-            ):
-                utt["is_backchannel"] = True
+            nonlocal prev_speaker
             utt["words"] = words
             grouped.append(utt)
             prev_speaker = utt["speaker"]
-            suppress_tag = False
 
         # interjections shorter than this duration or consisting of a single word
         # are candidates to be absorbed
@@ -254,12 +273,9 @@ def _group_utterances(
                 else:
                     append_current(current, current_words)
                     interj = seg.copy()
-                    if tag_backchannels and _is_backchannel(interj):
-                        interj["is_backchannel"] = True
                     append_current(interj, [seg])
                     current = norm_segments[i + 1].copy()
                     current_words = [norm_segments[i + 1].copy()]
-                    suppress_tag = True
                     i += 2
                     continue
 
@@ -272,11 +288,8 @@ def _group_utterances(
             merged = [grouped[0].copy()]
             merged[0]["words"] = grouped[0]["words"].copy()
             for utt in grouped[1:]:
-                if (
-                    utt["speaker"] == merged[-1]["speaker"]
-                    and not merged[-1].get("is_backchannel")
-                    and not utt.get("is_backchannel")
-                ):
+                can_merge = utt["speaker"] == merged[-1]["speaker"]
+                if can_merge:
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
                     merged[-1]["words"].extend(utt.get("words", []))
@@ -477,8 +490,8 @@ def _split_multispeaker_segments(words):
 def export_word_level_excel(
     words,
     path: str = "Single_Word_Transcript.xlsx",
-    backchannel_max_dur: float = 0.7,
-    backchannel_max_words: int = 3,
+    multi_spk_seg_min_words: int | None = None,
+    backchannel_run_min_words: int | None = None,
 ):
     """Export word-level segments to Excel with a CSV fallback.
 
@@ -488,10 +501,12 @@ def export_word_level_excel(
         Word-level diarization results.
     path : str, optional
         Output path for the Excel file.
-    backchannel_max_dur : float, optional
-        Duration threshold for backchannel detection in seconds.
-    backchannel_max_words : int, optional
-        Word-count threshold for backchannel detection.
+    multi_spk_seg_min_words : int | None, optional
+        Minimum total words in a segment to enable run-based
+        utterance/backchannel logic.
+    backchannel_run_min_words : int | None, optional
+        Minimum consecutive words by the same speaker (run) to tag that run as a
+        backchannel. Only used when ``multi_spk_seg_min_words`` is also set.
     """
 
     if not words:
@@ -501,9 +516,8 @@ def export_word_level_excel(
 
     utterances = _group_utterances(
         words,
-        backchannel_max_dur=backchannel_max_dur,
-        backchannel_max_words=backchannel_max_words,
-        tag_backchannels=True,
+        multi_spk_seg_min_words=multi_spk_seg_min_words,
+        backchannel_run_min_words=backchannel_run_min_words,
     )
     utterances = sorted(utterances, key=lambda u: u.get("start", 0))
 
@@ -699,6 +713,8 @@ class WhisperXDiarizationWorkflow(Runnable):
         preserve_backchannels: bool = True,
         preserve_end_times: bool = True,
         export_words_xlsx: bool = False,
+        multi_spk_seg_min_words: int | None = None,
+        backchannel_run_min_words: int | None = None,
     ) -> str:
         logger.info("Transcribing and diarizing %s", audio_path)
         result = transcribe_diarize_whisperx.invoke(
@@ -716,7 +732,12 @@ class WhisperXDiarizationWorkflow(Runnable):
         if segments:
             logger.debug("First diarized segment: %s", segments[0])
             if export_words_xlsx:
-                export_word_level_excel(segments, "Single_Word_Transcript.xlsx")
+                export_word_level_excel(
+                    segments,
+                    "Single_Word_Transcript.xlsx",
+                    multi_spk_seg_min_words=multi_spk_seg_min_words,
+                    backchannel_run_min_words=backchannel_run_min_words,
+                )
             if SegmentSaver is None:
                 raise ImportError("SegmentSaver requires optional dependencies")
             saver = SegmentSaver(db_path=db_path, output_dir=clip_dir)
@@ -726,10 +747,8 @@ class WhisperXDiarizationWorkflow(Runnable):
                 segments_info=result.get("segments_info"),
                 merge_sentences=True,
                 absorb_interjections=not preserve_backchannels,
-                tag_backchannels=True,
-                backchannel_max_dur=0.7,
-                backchannel_max_words=3,
-                preserve_end_times=preserve_end_times,
+                multi_spk_seg_min_words=multi_spk_seg_min_words,
+                backchannel_run_min_words=backchannel_run_min_words,
             )
             logger.info("Saving %d utterances to %s", len(utterances), clip_dir)
             for idx, utt in enumerate(utterances, 1):
@@ -777,6 +796,18 @@ def main():
         action="store_true",
         help="Export word-level transcript to Excel (CSV fallback)",
     )
+    parser.add_argument(
+        "--multi-spk-seg-min-words",
+        type=int,
+        default=None,
+        help="Min total words in a segment to enable run-based utterance/backchannel logic",
+    )
+    parser.add_argument(
+        "--backchannel-run-min-words",
+        type=int,
+        default=None,
+        help="Min consecutive words by same speaker (run) to tag that run as backchannel",
+    )
     args = parser.parse_args()
 
     if args.diarize:
@@ -789,6 +820,8 @@ def main():
             preserve_backchannels=args.preserve_backchannels,
             preserve_end_times=args.preserve_end_times,
             export_words_xlsx=args.export_words_xlsx,
+            multi_spk_seg_min_words=args.multi_spk_seg_min_words,
+            backchannel_run_min_words=args.backchannel_run_min_words,
         )
     else:
         workflow = TranscriptionOnlyWorkflow()
