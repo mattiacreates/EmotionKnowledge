@@ -17,12 +17,17 @@ class FakeCollection:
 
 
 class FakeClient:
-    def __init__(self, path):
+    def __init__(self, path, settings=None):
         self.path = path
+        self.settings = settings
         self.collection = FakeCollection()
+        self.reset_called = False
 
     def get_or_create_collection(self, name):
         return self.collection
+
+    def reset(self):
+        self.reset_called = True
 
 
 def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
@@ -42,6 +47,12 @@ def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
             "end": 0.5,
             "speaker": "spk",
             "text": "hello",
+            "duration": 0.5,
+            "n_words": 1,
+            "words_per_sec": 2.0,
+            "mean_word_gap": 0.0,
+            "p95_word_gap": 0.0,
+            "overlaps_started": False,
         }
     )
 
@@ -50,4 +61,31 @@ def test_segment_saver_saves_audio_and_metadata(monkeypatch, tmp_path):
     docs, metas, ids = saver.collection.add_calls[0]
     assert metas[0]["text"] == "hello"
     assert metas[0]["speaker"] == "spk"
+    assert metas[0]["duration"] == pytest.approx(0.5)
+    assert metas[0]["n_words"] == 1
+    assert metas[0]["overlaps_started"] is False
+
+
+def test_segment_saver_reset_db(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "emotion_knowledge.segment_saver.chromadb.PersistentClient",
+        FakeClient,
+    )
+
+    saver = SegmentSaver(
+        db_path=str(tmp_path / "db"), output_dir=str(tmp_path), allow_reset=True
+    )
+    saver.reset_db()
+    assert saver.client.reset_called
+
+
+def test_segment_saver_reset_requires_flag(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "emotion_knowledge.segment_saver.chromadb.PersistentClient",
+        FakeClient,
+    )
+
+    saver = SegmentSaver(db_path=str(tmp_path / "db"), output_dir=str(tmp_path))
+    with pytest.raises(PermissionError):
+        saver.reset_db()
 

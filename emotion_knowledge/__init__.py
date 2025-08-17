@@ -130,7 +130,7 @@ def _group_utterances(
     elif all(seg.get("segment") is not None for seg in norm_segments):
         use_segment_ids = True
 
-    # If we have segment ids we simply merge by those first
+    grouped = []
     if use_segment_ids:
         ordered_groups = []
         if segments_info is not None:
@@ -152,7 +152,6 @@ def _group_utterances(
             if buf:
                 ordered_groups.append(buf)
 
-        grouped = []
         for group in ordered_groups:
             speaker_counts = {}
             for w in group:
@@ -166,12 +165,14 @@ def _group_utterances(
                 "start": first_word["start"],
                 "end": last_word["end"],
                 "text": " ".join(w["text"] for w in group),
+                "words": group,
             }
             _tag_backchannel(utt)
             grouped.append(utt)
 
         if merge_sentences and grouped:
             merged = [grouped[0].copy()]
+            merged[0]["words"] = grouped[0]["words"].copy()
             for utt in grouped[1:]:
                 if (
                     utt["speaker"] == merged[-1]["speaker"]
@@ -180,109 +181,149 @@ def _group_utterances(
                 ):
                     merged[-1]["text"] += " " + utt["text"]
                     merged[-1]["end"] = utt["end"]
+                    merged[-1]["words"].extend(utt.get("words", []))
                 else:
-                    merged.append(utt.copy())
+                    new_utt = utt.copy()
+                    new_utt["words"] = utt.get("words", []).copy()
+                    merged.append(new_utt)
             grouped = merged
+    else:
+        # WhisperX already returns the word segments in chronological order.
+        # Sorting here can lead to problems when some words have missing or
+        # zero timestamps (e.g. due to alignment issues).  Such words would be
+        # moved to the beginning and end up in the wrong utterance.  We therefore
+        # keep the original order instead of sorting by ``start`` time.
 
-        logger.info("Created %d utterances based on segment ids", len(grouped))
-        for idx, utt in enumerate(grouped, 1):
-            logger.debug(
-                "Utterance %d: speaker=%s start=%.2f end=%.2f text=%s",
-                idx,
-                utt.get("speaker"),
-                utt.get("start"),
-                utt.get("end"),
-                utt.get("text"),
-            )
-        return grouped
-
-    # WhisperX already returns the word segments in chronological order.
-    # Sorting here can lead to problems when some words have missing or
-    # zero timestamps (e.g. due to alignment issues).  Such words would be
-    # moved to the beginning and end up in the wrong utterance.  We therefore
-    # keep the original order instead of sorting by ``start`` time.
-
-    grouped = []
-    current = norm_segments[0].copy()
-    prev_speaker = None
-    suppress_tag = False
-
-    def append_current(utt):
-        nonlocal prev_speaker, suppress_tag
-        if (
-            tag_backchannels
-            and not suppress_tag
-            and prev_speaker is not None
-            and utt["speaker"] != prev_speaker
-            and _is_backchannel(utt)
-        ):
-            utt["is_backchannel"] = True
-        grouped.append(utt)
-        prev_speaker = utt["speaker"]
+        current = norm_segments[0].copy()
+        current_words = [norm_segments[0].copy()]
+        prev_speaker = None
         suppress_tag = False
 
-    # interjections shorter than this duration or consisting of a single word
-    # are candidates to be absorbed
-    interjection_dur = 1.0
-    i = 1
-    while i < len(norm_segments):
-        seg = norm_segments[i]
-        gap = seg["start"] - current["end"]
-
-        # merge same-speaker segments when the pause is short
-        if seg["speaker"] == current["speaker"] and gap <= max_gap:
-            current["text"] += " " + seg["text"]
-            current["end"] = seg["end"]
-            i += 1
-            continue
-
-        # short interjection from another speaker followed by the original speaker
-        if (
-            seg["speaker"] != current["speaker"]
-            and (
-                seg["end"] - seg["start"] <= interjection_dur
-                or " " not in seg["text"].strip()
-            )
-            and i + 1 < len(norm_segments)
-            and norm_segments[i + 1]["speaker"] == current["speaker"]
-            and norm_segments[i + 1]["start"] - current["end"] <= interjection_dur
-        ):
-            if absorb_interjections:
-                current["text"] += " " + seg["text"]
-                next_seg = norm_segments[i + 1]
-                current["text"] += " " + next_seg["text"]
-                current["end"] = next_seg["end"]
-                i += 2
-                continue
-            else:
-                append_current(current)
-                interj = seg.copy()
-                if tag_backchannels and _is_backchannel(interj):
-                    interj["is_backchannel"] = True
-                append_current(interj)
-                current = norm_segments[i + 1].copy()
-                suppress_tag = True
-                i += 2
-                continue
-
-        append_current(current)
-        current = seg.copy()
-        i += 1
-
-    append_current(current)
-    if merge_sentences and grouped:
-        merged = [grouped[0].copy()]
-        for utt in grouped[1:]:
+        def append_current(utt, words):
+            """Finalize the current utterance and store its word list."""
+            nonlocal prev_speaker, suppress_tag
             if (
-                utt["speaker"] == merged[-1]["speaker"]
-                and not merged[-1].get("is_backchannel")
-                and not utt.get("is_backchannel")
+                tag_backchannels
+                and not suppress_tag
+                and prev_speaker is not None
+                and utt["speaker"] != prev_speaker
+                and _is_backchannel(utt)
             ):
-                merged[-1]["text"] += " " + utt["text"]
-                merged[-1]["end"] = utt["end"]
-            else:
-                merged.append(utt.copy())
-        grouped = merged
+                utt["is_backchannel"] = True
+            utt["words"] = words
+            grouped.append(utt)
+            prev_speaker = utt["speaker"]
+            suppress_tag = False
+
+        # interjections shorter than this duration or consisting of a single word
+        # are candidates to be absorbed
+        interjection_dur = 1.0
+        i = 1
+        while i < len(norm_segments):
+            seg = norm_segments[i]
+            gap = seg["start"] - current["end"]
+
+            # merge same-speaker segments when the pause is short
+            if seg["speaker"] == current["speaker"] and gap <= max_gap:
+                current["text"] += " " + seg["text"]
+                current["end"] = seg["end"]
+                current_words.append(seg)
+                i += 1
+                continue
+
+            # short interjection from another speaker followed by the original speaker
+            if (
+                seg["speaker"] != current["speaker"]
+                and (
+                    seg["end"] - seg["start"] <= interjection_dur
+                    or " " not in seg["text"].strip()
+                )
+                and i + 1 < len(norm_segments)
+                and norm_segments[i + 1]["speaker"] == current["speaker"]
+                and norm_segments[i + 1]["start"] - current["end"] <= interjection_dur
+            ):
+                if absorb_interjections:
+                    current["text"] += " " + seg["text"]
+                    current_words.append(seg)
+                    next_seg = norm_segments[i + 1]
+                    current["text"] += " " + next_seg["text"]
+                    current["end"] = next_seg["end"]
+                    current_words.append(next_seg)
+                    i += 2
+                    continue
+                else:
+                    append_current(current, current_words)
+                    interj = seg.copy()
+                    if tag_backchannels and _is_backchannel(interj):
+                        interj["is_backchannel"] = True
+                    append_current(interj, [seg])
+                    current = norm_segments[i + 1].copy()
+                    current_words = [norm_segments[i + 1].copy()]
+                    suppress_tag = True
+                    i += 2
+                    continue
+
+            append_current(current, current_words)
+            current = seg.copy()
+            current_words = [seg.copy()]
+            i += 1
+        append_current(current, current_words)
+        if merge_sentences and grouped:
+            merged = [grouped[0].copy()]
+            merged[0]["words"] = grouped[0]["words"].copy()
+            for utt in grouped[1:]:
+                if (
+                    utt["speaker"] == merged[-1]["speaker"]
+                    and not merged[-1].get("is_backchannel")
+                    and not utt.get("is_backchannel")
+                ):
+                    merged[-1]["text"] += " " + utt["text"]
+                    merged[-1]["end"] = utt["end"]
+                    merged[-1]["words"].extend(utt.get("words", []))
+                else:
+                    new_utt = utt.copy()
+                    new_utt["words"] = utt.get("words", []).copy()
+                    merged.append(new_utt)
+            grouped = merged
+
+    # Compute statistics for each utterance
+    for utt in grouped:
+        words = utt.get("words", [])
+        utt["n_words"] = len(words)
+        duration = utt["end"] - utt["start"]
+        utt["duration"] = duration
+        utt["words_per_sec"] = (len(words) / duration) if duration > 0 else 0.0
+        gaps = [
+            words[i]["start"] - words[i - 1]["end"]
+            for i in range(1, len(words))
+        ]
+        if gaps:
+            utt["mean_word_gap"] = sum(gaps) / len(gaps)
+            sorted_gaps = sorted(gaps)
+            k = int(round(0.95 * (len(sorted_gaps) - 1)))
+            utt["p95_word_gap"] = sorted_gaps[k]
+        else:
+            utt["mean_word_gap"] = 0.0
+            utt["p95_word_gap"] = 0.0
+
+    # Determine whether each utterance starts during another speaker's speech
+    prev_end = None
+    prev_speaker = None
+    for utt in grouped:
+        if (
+            prev_end is not None
+            and utt["start"] < prev_end
+            and utt["speaker"] != prev_speaker
+        ):
+            utt["overlaps_started"] = True
+        else:
+            utt["overlaps_started"] = False
+        if prev_end is None or utt["end"] > prev_end:
+            prev_end = utt["end"]
+            prev_speaker = utt["speaker"]
+
+    for utt in grouped:
+        utt.pop("words", None)
 
     logger.info("Created %d utterances", len(grouped))
     for idx, utt in enumerate(grouped, 1):
@@ -458,7 +499,16 @@ def export_word_level_excel(
 
     import pandas as pd
 
+    utterances = _group_utterances(
+        words,
+        backchannel_max_dur=backchannel_max_dur,
+        backchannel_max_words=backchannel_max_words,
+        tag_backchannels=True,
+    )
+    utterances = sorted(utterances, key=lambda u: u.get("start", 0))
+
     rows = []
+    utt_idx = 0
     for idx, w in enumerate(words, 1):
         start = float(w.get("start", w.get("start_time", 0)) or 0)
         end_val = w.get("end")
@@ -469,10 +519,12 @@ def export_word_level_excel(
         end = float(end_val)
         duration = max(0.0, end - start)
         text = w.get("text", w.get("word", ""))
-        word_count = len(str(text).strip().split())
-        is_backchannel = (
-            duration <= backchannel_max_dur or word_count <= backchannel_max_words
-        )
+        while (
+            utt_idx + 1 < len(utterances)
+            and start >= utterances[utt_idx]["end"]
+        ):
+            utt_idx += 1
+        is_backchannel = bool(utterances[utt_idx].get("is_backchannel", False))
         rows.append(
             {
                 "idx": idx,
