@@ -155,3 +155,23 @@ Replace `/path/to/audio.wav` with a file from your Google Drive or an uploaded
 sample. The results are printed to the notebook and, when diarization is
 enabled, stored in the local `segment_db` directory.
 
+## Interactive chat with Chainlit
+
+After diarizing and storing segments in ChromaDB, you can explore them with a
+chat interface. The example `chainlit_app.py` loads a Hugging Face chat model
+and retrieves relevant utterances from the `segment_db` to use as additional
+context. The model name and database path are controlled via environment
+variables so that different models can be swapped without code changes.
+
+Install the extra dependencies and start the app:
+
+```bash
+pip install -r requirements.txt  # includes chainlit and sentence-transformers
+chainlit run chainlit_app.py
+```
+
+Set `HF_MODEL` to point to any compatible chat model on the Hugging Face hub,
+for example `export HF_MODEL="meta-llama/Llama-2-7b-chat-hf"`. The app will
+automatically use transcripts stored in `segment_db/segments` as context for
+each user message.
+
